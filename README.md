@@ -1,14 +1,19 @@
 # GOCAD Surface Accuracy Analysis
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Release](https://img.shields.io/badge/version-0.1.0-blue)
 
-Questo progetto implementa un flusso di lavoro per l'analisi dell'accuratezza di superfici geologiche in formato GOCAD (.ts). Il sistema valuta la qualità del modello geologico calcolando indici di accuratezza orizzontale e verticale su una griglia definita dall'estensione delle superfici.
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/BaterHub/GeoSurface_Accuracy/blob/main/GeoSurface_Accuracy.ipynb)
+
+Questo progetto implementa un flusso di lavoro per l'analisi dell'accuratezza di superfici geologiche in formato GOCAD (.ts). Il sistema valuta la qualità del modello geologico calcolando indici di accuratezza orizzontale e verticale su una griglia definita dall'estensione delle superfici e rispetto all'andamento delle sezioni sismiche e delle localizzazioni dei pozzi utilizzati forniti come shapefile.
 
 ## Funzionalità principali
 
 - Lettura di superfici in formato GOCAD .ts
 - Definizione automatica della griglia di valutazione basata sull'estensione del modello
-- Calcolo dell'accuratezza orizzontale basata sulla distanza dai punti di controllo
+- Calcolo dell'accuratezza orizzontale basata sulla distanza dai punti di controllo (linee e punti in formato shapefile)
 - Calcolo dell'accuratezza verticale basata sulla variazione di profondità
 - Generazione di mappe di accuratezza in formato GOCAD .ts e JPG
 - Esportazione dei risultati in formato CSV
@@ -50,7 +55,7 @@ gocad-accuracy-analysis/
     └── delta_depth.jpg
 ```
 
-## Utilizzo
+## Utilizzo in locale
 
 1. Clona il repository:
 
@@ -75,12 +80,28 @@ jupyter notebook notebook.ipynb
 
 5. I risultati saranno salvati nella directory `output_results`
 
+
+## 🚀 Utilizzo su colab
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/BaterHub/GeoSurface_Accuracy/blob/main/GeoSurface_Accuracy.ipynb)
+
+1. **Apertura notebook**:
+    Clicca sul badge "Open in Colab" per aprire il notebook
+2. **Configurazione iniziale**:
+    Carica il workspace eseguendo la prima cella 
+3. **Preparazione files**:
+    Carica il pacchetto dati delle superfici del modello 3D (file horizon.ts) all'interno della cartella "working_files_folder"
+4. **Esecuzione notebook**:
+    Posizionati nella seconda cella e lancia lo script con "ctrl + F10" oppure dal menù "Runtime > Run cell and below"
+5. **Lettura log file**:
+    Al termine del RUN verrà generato un log_file all'interno della cartella_files che conterrà il relativo report.
+
 ## Classificazione delle superfici
 
-Per consentire una corretta classificazione delle superfici, assicurati che i nomi dei file o delle superfici GOCAD contengano una delle seguenti indicazioni:
+Per consentire una corretta classificazione delle superfici, assicurati che i nomi dei file contenenti le coordinate delle linee e dei punti di controllo contengano una delle seguenti indicazioni:
 
 - **Pozzi/Boreholes**: Nomi contenenti "borehole", "well", "pozzo"
-- **Sezioni**: Nomi contenenti "section", "sezione"
+- **Sezioni**: Nomi contenenti "section", "sezione", "seismic_line", "line"
 - **Mappe**: Nomi contenenti "map", "mappa"
 
 ## Dettagli sull'algoritmo
