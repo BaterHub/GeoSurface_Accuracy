@@ -39,13 +39,24 @@ pip install -r requirements.txt
 
 ```
 gocad-accuracy-analysis/
-├── notebook.ipynb            # Notebook principale
-├── requirements.txt          # Requisiti Python
+├── notebook.ipynb            # Questo notebook
 ├── input_surfaces/           # Directory per i file GOCAD .ts
-│   ├── surface1.ts
-│   ├── surface2.ts
-│   └── ...
-└── output_results/           # Directory per i risultati
+│   ├── multi_surface1.ts     # File TS con più superfici
+│   └── surface2.ts
+├── control_points/           # Directory per gli shapefile di controllo
+│   ├── boreholes.shp        # Punti di borehole
+│   ├── boreholes.dbf
+│   ├── boreholes.shx
+│   ├── boreholes.prj
+│   ├── sections.shp         # Punti di sezione
+│   ├── sections.dbf
+│   ├── sections.shx
+│   ├── sections.prj
+│   ├── maps.shp            # Punti di mappa
+│   ├── maps.dbf
+│   ├── maps.shx
+│   └── maps.prj
+└── output_results/          # Directory per i risultati
     ├── accuracy_output.csv
     ├── horizontal_accuracy.ts
     ├── vertical_accuracy.ts
