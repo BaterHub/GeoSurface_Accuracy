@@ -12,6 +12,7 @@ from matplotlib import cm
 import networkx as nx
 from scipy.spatial import cKDTree
 from scipy import ndimage
+import warnings
 
 
 # Funzione per leggere il file GOCAD .ts
@@ -204,6 +205,201 @@ def read_sections_shapefile(working_dir):
     except Exception as e:
         print(f"Errore durante la lettura dello shapefile delle sezioni: {e}")
         return None
+
+
+# Utilità per accuratezza orizzontale su griglia
+def get_surface_name(working_dir):
+    ts_files = [f for f in os.listdir(working_dir) if f.endswith('.ts')]
+    if not ts_files:
+        return "surface_1"
+    ts_path = os.path.join(working_dir, ts_files[0])
+    try:
+        with open(ts_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip().lower().startswith('name:'):
+                    return line.split(':', 1)[1].strip()
+    except Exception:
+        pass
+    return "surface_1"
+
+
+def ensure_mapping_file(working_dir, surface_name):
+    """
+    Garantisce un file di mapping surface->dati (pozzi/sezioni/mappe).
+    Se assente, crea un template con tutti i dati abilitati eccetto mappe.
+    """
+    import pandas as pd
+    map_path = os.path.join(working_dir, 'surface_data_mapping.csv')
+    if not os.path.exists(map_path):
+        df = pd.DataFrame([{
+            'surface': surface_name,
+            'use_wells': 1,
+            'use_sections': 1,
+            'use_maps': 0
+        }])
+        df.to_csv(map_path, index=False)
+        print(f"Creato file di mapping: {map_path}")
+    try:
+        df = pd.read_csv(map_path)
+    except Exception as e:
+        print(f"Impossibile leggere {map_path}: {e}. Uso impostazioni di default.")
+        return {'use_wells': True, 'use_sections': True, 'use_maps': False}
+    row = df[df['surface'] == surface_name]
+    if row.empty:
+        print(f"Nessuna riga per la superficie {surface_name} in mapping. Uso default.")
+        return {'use_wells': True, 'use_sections': True, 'use_maps': False}
+    def bool_val(col):
+        return bool(row.iloc[0].get(col, 1))
+    return {
+        'use_wells': bool_val('use_wells'),
+        'use_sections': bool_val('use_sections'),
+        'use_maps': bool_val('use_maps')
+    }
+
+
+def build_grid(vertices, spacing=5000):
+    xs, ys = vertices[:, 0], vertices[:, 1]
+    min_x, max_x = xs.min(), xs.max()
+    min_y, max_y = ys.min(), ys.max()
+    gx = np.arange(min_x, max_x + spacing, spacing)
+    gy = np.arange(min_y, max_y + spacing, spacing)
+    GX, GY = np.meshgrid(gx, gy)
+    grid_points = np.c_[GX.ravel(), GY.ravel()]
+    return GX, GY, grid_points
+
+
+def nearest_distance(points, targets):
+    tree = cKDTree(targets)
+    dist, idx = tree.query(points, k=1)
+    return dist, idx
+
+
+def extract_points_from_wells(wells_gdf):
+    xs = wells_gdf.geometry.x.values
+    ys = wells_gdf.geometry.y.values
+    return xs, ys
+
+
+def sample_lines_gdf(lines_gdf, step=2000):
+    pts_x, pts_y = [], []
+    for geom in lines_gdf.geometry:
+        if geom is None or geom.is_empty:
+            continue
+        geoms = [geom] if geom.geom_type == 'LineString' else list(geom.geoms)
+        for g in geoms:
+            num = max(2, int(max(g.length, step) // step))
+            for f in np.linspace(0, 1, num):
+                p = g.interpolate(f, normalized=True)
+                pts_x.append(p.x)
+                pts_y.append(p.y)
+    return np.array(pts_x), np.array(pts_y)
+
+
+def compute_horizontal_weights(grid_points, wells_points=None, sections_points=None, power=2):
+    weights_list = []
+    eps = 1e-6
+    if wells_points is not None and wells_points.shape[0] > 0:
+        dists, _ = nearest_distance(grid_points, wells_points)
+        w = 1 / np.power(dists + eps, power)
+        w = w / w.max()
+        weights_list.append(w)
+    if sections_points is not None and sections_points.shape[0] > 0:
+        dists, _ = nearest_distance(grid_points, sections_points)
+        w = 1 / np.power(dists + eps, power)
+        w = w / w.max()
+        weights_list.append(w * 0.7)  # attenua ordine 2
+    if not weights_list:
+        return None, None, None
+    stack = np.vstack(weights_list)
+    combined = stack.mean(axis=0)
+    wells_w = weights_list[0] if weights_list else None
+    sections_w = weights_list[1] if len(weights_list) > 1 else None
+    return combined, wells_w, sections_w
+
+
+def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
+                              use_wells=True, use_sections=True,
+                              grid_spacing=5000, line_step=2000):
+    """
+    Calcola pesi orizzontali (IDW) e distribuzioni delle distanze.
+    Salva CSV e PNG in output_dir.
+    """
+    import pandas as pd
+    os.makedirs(output_dir, exist_ok=True)
+    GX, GY, grid_points = build_grid(vertices, spacing=grid_spacing)
+
+    wells_points = None
+    sections_points = None
+    if use_wells and wells_shp is not None and not wells_shp.empty:
+        wx, wy = extract_points_from_wells(wells_shp)
+        wells_points = np.c_[wx, wy]
+    if use_sections and sections_shp is not None and not sections_shp.empty:
+        lx, ly = sample_lines_gdf(sections_shp, step=line_step)
+        if len(lx) > 0:
+            sections_points = np.c_[lx, ly]
+
+    combined, wells_w, sections_w = compute_horizontal_weights(
+        grid_points, wells_points, sections_points, power=2
+    )
+
+    df = pd.DataFrame({'x': grid_points[:, 0], 'y': grid_points[:, 1]})
+    if wells_points is not None:
+        d_w, _ = nearest_distance(grid_points, wells_points)
+        df['dist_wells'] = d_w
+        if wells_w is not None:
+            df['weight_wells'] = wells_w
+    if sections_points is not None:
+        d_s, _ = nearest_distance(grid_points, sections_points)
+        df['dist_sections'] = d_s
+        if sections_w is not None:
+            df['weight_sections'] = sections_w
+    if combined is not None:
+        df['weight_combined'] = combined
+
+    df.to_csv(os.path.join(output_dir, 'horizontal_accuracy_grid.csv'), index=False)
+
+    # Heatmap
+    if combined is not None:
+        try:
+            grid_weights = combined.reshape(GX.shape)
+            fig_w = plt.figure(figsize=(10, 8))
+            plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
+            plt.colorbar(label='Peso (accuratezza orizzontale)')
+            if wells_points is not None:
+                plt.scatter(wells_points[:, 0], wells_points[:, 1], s=8, color='red', label='Pozzi')
+            if sections_points is not None:
+                plt.scatter(sections_points[:, 0], sections_points[:, 1], s=4, color='orange', label='Sezioni (campionate)')
+            if (wells_points is not None) or (sections_points is not None):
+                plt.legend(loc='lower left', fontsize=8)
+            plt.title('Accuratezza orizzontale (IDW vincoli)')
+            plt.savefig(os.path.join(output_dir, 'horizontal_accuracy_idw.png'), dpi=300, bbox_inches='tight')
+            plt.close(fig_w)
+        except Exception as e:
+            warnings.warn(f"Impossibile salvare heatmap pesi: {e}")
+
+    # Istogrammi distanze
+    try:
+        fig_h = plt.figure(figsize=(8, 6))
+        if wells_points is not None:
+            plt.hist(df['dist_wells'], bins=40, alpha=0.6, label='Pozzi')
+        if sections_points is not None:
+            plt.hist(df['dist_sections'], bins=40, alpha=0.6, label='Sezioni')
+        plt.xlabel('Distanza dal vincolo (m)')
+        plt.ylabel('Occorrenze')
+        plt.title('Distribuzione delle distanze ai vincoli')
+        if (wells_points is not None) or (sections_points is not None):
+            plt.legend()
+        plt.savefig(os.path.join(output_dir, 'distance_histogram.png'), dpi=300, bbox_inches='tight')
+        plt.close(fig_h)
+    except Exception as e:
+        warnings.warn(f"Impossibile salvare istogramma distanze: {e}")
+
+    return {
+        'grid_points': grid_points,
+        'weights': combined,
+        'weights_wells': wells_w,
+        'weights_sections': sections_w
+    }
 
 
 def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing=False,
