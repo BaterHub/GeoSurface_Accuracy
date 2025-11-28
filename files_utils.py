@@ -78,7 +78,7 @@ def read_gocad_ts(file_path):
 
 def read_gocad_ts_multi(file_path):
     """
-    Legge un file GOCAD .ts con piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ superfici e restituisce un dict
+    Legge un file GOCAD .ts con piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ superfici e restituisce un dict
     {surface_name: {'vertices': np.array, 'triangles': np.array}}
     """
     surfaces = {}
@@ -267,7 +267,7 @@ def read_sections_shapefile(working_dir):
         return None
 
 
-# UtilitÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  per accuratezza orizzontale su griglia
+# UtilitÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  per accuratezza orizzontale su griglia
 def get_surface_name(working_dir):
     ts_files = [f for f in os.listdir(working_dir) if f.endswith('.ts')]
     if not ts_files:
@@ -632,7 +632,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                 rect_coords = [(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)]
                 rect_polygon = Polygon(rect_coords)
                 x, y = rect_polygon.exterior.xy
-                ax_2d.fill(x, y, color='steelblue', alpha=0.1, label='Ingombro superficie')
+                ax_2d.fill(x, y, color='steelblue', alpha=0.1, label='Ingombro modello e dati')
                 ax_2d.plot(x, y, color='steelblue', linewidth=1.5, alpha=0.7)
                 print("Ingombro superfici visualizzato come rettangolo (super-ottimizzato)")
             except Exception as e:
@@ -757,7 +757,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
 
     ax_2d.set_xlabel('X (m)', fontsize=12, fontweight='bold')
     ax_2d.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
-    title_txt = f"Ingombro superficie {surface_name}" if surface_name else "Ingombro superficie"
+    title_txt = f"Ingombro modello e dati {surface_name}" if surface_name else "Ingombro modello e dati"
     ax_2d.set_title(title_txt, fontsize=16, fontweight='bold', pad=20)
 
     if stats_info:
