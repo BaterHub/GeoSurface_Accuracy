@@ -847,7 +847,8 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"Figura salvata in: {output_path}")
 
-    if show_plot:\n        plt.show()
+    if show_plot:
+        plt.show()
     plt.close(fig)
     return fig
 
