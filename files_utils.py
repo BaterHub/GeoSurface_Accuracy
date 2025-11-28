@@ -346,6 +346,26 @@ def filter_checkpoints_by_edges(edges_df, surface, wells_gdf, sections_gdf):
     subset = edges_df[edges_df['surface'] == surface] if edges_df is not None else pd.DataFrame()
     if subset.empty:
         return wells_out, sections_out
+    def norm_series(s):
+        return s.fillna('').astype(str).str.strip().str.lower()
+    # normalizza edges
+    subset_ids = norm_series(subset['checkpoint_id'])
+    subset_types = norm_series(subset['type'])
+    # pozzi
+    if wells_gdf is not None:
+        wells_ids = norm_series(wells_gdf['NOME_POZZO']) if 'NOME_POZZO' in wells_gdf.columns else norm_series(wells_gdf.index.to_series())
+        wells_sel = subset[(subset_types == 'well')]
+        if not wells_sel.empty and 'all' not in subset_ids[wells_sel.index].unique():
+            ids = subset_ids[wells_sel.index].tolist()
+            wells_out = wells_gdf[wells_ids.isin(ids)]
+    # sezioni
+    if sections_gdf is not None:
+        sec_ids = norm_series(sections_gdf['NOME']) if 'NOME' in sections_gdf.columns else norm_series(sections_gdf.index.to_series())
+        sec_sel = subset[(subset_types == 'section')]
+        if not sec_sel.empty and 'all' not in subset_ids[sec_sel.index].unique():
+            ids = subset_ids[sec_sel.index].tolist()
+            sections_out = sections_gdf[sec_ids.isin(ids)]
+    return wells_out, sections_out
     # pozzi
     wells_edges = subset[subset['type'].str.lower() == 'well']
     if wells_gdf is not None and not wells_edges.empty:
