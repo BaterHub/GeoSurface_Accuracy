@@ -78,7 +78,7 @@ def read_gocad_ts(file_path):
 
 def read_gocad_ts_multi(file_path):
     """
-    Legge un file GOCAD .ts con piÃƒÆ’Ã‚Â¹ superfici e restituisce un dict
+    Legge un file GOCAD .ts con piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ superfici e restituisce un dict
     {surface_name: {'vertices': np.array, 'triangles': np.array}}
     """
     surfaces = {}
@@ -267,7 +267,7 @@ def read_sections_shapefile(working_dir):
         return None
 
 
-# UtilitÃƒÆ’Ã‚Â  per accuratezza orizzontale su griglia
+# UtilitÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  per accuratezza orizzontale su griglia
 def get_surface_name(working_dir):
     ts_files = [f for f in os.listdir(working_dir) if f.endswith('.ts')]
     if not ts_files:
@@ -811,8 +811,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
         if grid_label_added:
             legend_elements.append(Line2D([0], [0], marker='s', color='w', markerfacecolor='gray',
                                           markersize=6, alpha=0.5, label='Griglia valutazione'))
-        ax_2d.legend(handles=legend_elements, loc='upper left',
-                     frameon=True, framealpha=0.9, edgecolor='lightgray')
+        ax_2d.legend(handles=legend_elements, loc='upper left', frameon=True, framealpha=0.9, edgecolor='lightgray')
 
     ax_2d.text(0.02, 0.02, f"Sistema di coordinate: {crs}",
                transform=ax_2d.transAxes,
@@ -834,7 +833,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
             ax_2d.scatter(grid_points[:, 0], grid_points[:, 1], s=3, color='gray', alpha=0.3, label='Griglia valutazione')
             grid_label_added = True
         except Exception:
-            pass
+            grid_label_added = False
 
     plt.tight_layout()
 
