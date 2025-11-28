@@ -317,58 +317,51 @@ def ensure_mapping_file(working_dir, surface_name):
     }
 
 
-def ensure_checkpoint_usage_file(working_dir, surface_names, wells_gdf=None, sections_gdf=None):
+def ensure_checkpoint_edges_file(working_dir, surface_names, wells_gdf=None, sections_gdf=None):
     """
-    Crea un file template che associa pozzi/sezioni alle superfici.
-    Colonne: surface, well_ids, section_ids (liste separate da ';' oppure 'ALL').
+    Garantisce un file edge list surface-checkpoint-type.
+    Colonne: surface, checkpoint_id, type (well|section|map).
+    Template: una riga 'ALL' per wells e sections per ogni superficie.
     """
-    path = os.path.join(working_dir, 'surface_checkpoint_mapping.csv')
+    path = os.path.join(working_dir, 'surface_checkpoint_edges.csv')
     if os.path.exists(path):
         try:
             return pd.read_csv(path)
         except Exception:
             pass
-    well_ids = []
-    section_ids = []
-    if wells_gdf is not None:
-        if 'NOME_POZZO' in wells_gdf.columns:
-            well_ids = wells_gdf['NOME_POZZO'].astype(str).tolist()
-        else:
-            well_ids = wells_gdf.index.astype(str).tolist()
-    if sections_gdf is not None:
-        if 'NOME' in sections_gdf.columns:
-            section_ids = sections_gdf['NOME'].astype(str).tolist()
-        else:
-            section_ids = sections_gdf.index.astype(str).tolist()
     rows = []
     for s in surface_names:
-        rows.append({
-            'surface': s,
-            'well_ids': 'ALL',
-            'section_ids': 'ALL',
-            'map_ids': 'ALL'
-        })
+        rows.append({'surface': s, 'checkpoint_id': 'ALL', 'type': 'well'})
+        rows.append({'surface': s, 'checkpoint_id': 'ALL', 'type': 'section'})
+        rows.append({'surface': s, 'checkpoint_id': 'NONE', 'type': 'map'})
     df = pd.DataFrame(rows)
     df.to_csv(path, index=False)
-    print(f"Creato file di mapping checkpoints: {path}")
+    print(f"Creato file edge list checkpoints: {path}")
     return df
 
 
-def filter_checkpoints_by_mapping(mapping_df, surface, wells_gdf, sections_gdf):
+def filter_checkpoints_by_edges(edges_df, surface, wells_gdf, sections_gdf):
     wells_out = wells_gdf
     sections_out = sections_gdf
-    row = mapping_df[mapping_df['surface'] == surface]
-    if not row.empty:
-        well_ids = row.iloc[0].get('well_ids', 'ALL')
-        section_ids = row.iloc[0].get('section_ids', 'ALL')
-        if wells_gdf is not None and well_ids != 'ALL':
-            ids = [i for i in str(well_ids).split(';') if i]
+    subset = edges_df[edges_df['surface'] == surface] if edges_df is not None else pd.DataFrame()
+    if subset.empty:
+        return wells_out, sections_out
+    # pozzi
+    wells_edges = subset[subset['type'].str.lower() == 'well']
+    if wells_gdf is not None and not wells_edges.empty:
+        ids = wells_edges['checkpoint_id'].astype(str).tolist()
+        if 'ALL' not in ids:
+            ids = [i for i in ids if i and i != 'NONE']
             if 'NOME_POZZO' in wells_gdf.columns:
                 wells_out = wells_gdf[wells_gdf['NOME_POZZO'].astype(str).isin(ids)]
             else:
                 wells_out = wells_gdf[wells_gdf.index.astype(str).isin(ids)]
-        if sections_gdf is not None and section_ids != 'ALL':
-            ids = [i for i in str(section_ids).split(';') if i]
+    # sezioni
+    sec_edges = subset[subset['type'].str.lower() == 'section']
+    if sections_gdf is not None and not sec_edges.empty:
+        ids = sec_edges['checkpoint_id'].astype(str).tolist()
+        if 'ALL' not in ids:
+            ids = [i for i in ids if i and i != 'NONE']
             if 'NOME' in sections_gdf.columns:
                 sections_out = sections_gdf[sections_gdf['NOME'].astype(str).isin(ids)]
             else:
