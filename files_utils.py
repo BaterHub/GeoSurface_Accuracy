@@ -757,7 +757,13 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
 
     ax_2d.set_xlabel('X (m)', fontsize=12, fontweight='bold')
     ax_2d.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
-    title_txt = f"Ingombro modello e dati {surface_name}" if surface_name else "Ingombro modello e dati"
+    is_model = surface_name and str(surface_name).lower().startswith('modello')
+    if is_model:
+        title_txt = "Ingombro modello e dati"
+        stats_title = "STATISTICHE MODELLO"
+    else:
+        title_txt = f"Ingombro superficie {surface_name}" if surface_name else "Ingombro superficie"
+        stats_title = "STATISTICHE SUPERFICIE"
     ax_2d.set_title(title_txt, fontsize=16, fontweight='bold', pad=20)
 
     if stats_info:
@@ -772,7 +778,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                              edgecolor='lightgray',
                              alpha=0.9))
 
-        ax_2d.text(0.98, 1.02, "STATISTICHE MODELLO",
+        ax_2d.text(0.98, 1.02, stats_title,
                    transform=ax_2d.transAxes,
                    fontsize=11,
                    fontweight='bold',
