@@ -78,7 +78,7 @@ def read_gocad_ts(file_path):
 
 def read_gocad_ts_multi(file_path):
     """
-    Legge un file GOCAD .ts con più superfici e restituisce un dict
+    Legge un file GOCAD .ts con piÃƒÆ’Ã‚Â¹ superfici e restituisce un dict
     {surface_name: {'vertices': np.array, 'triangles': np.array}}
     """
     surfaces = {}
@@ -267,7 +267,7 @@ def read_sections_shapefile(working_dir):
         return None
 
 
-# Utilità per accuratezza orizzontale su griglia
+# UtilitÃƒÆ’Ã‚Â  per accuratezza orizzontale su griglia
 def get_surface_name(working_dir):
     ts_files = [f for f in os.listdir(working_dir) if f.endswith('.ts')]
     if not ts_files:
@@ -520,13 +520,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             fig_w = plt.figure(figsize=(10, 8))
             plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
             plt.colorbar(label='Peso (accuratezza orizzontale)')
-            if wells_points is not None:
-                plt.scatter(wells_points[:, 0], wells_points[:, 1], s=8, color='red', label='Pozzi')
-            if sections_points is not None:
-                plt.scatter(sections_points[:, 0], sections_points[:, 1], s=4, color='orange', label='Sezioni (campionate)')
-            if (wells_points is not None) or (sections_points is not None):
-                plt.legend(loc='lower left', fontsize=8)
-            plt.title('Accuratezza orizzontale (IDW vincoli)')
+                        plt.title('Accuratezza orizzontale (IDW vincoli)')
             plt.savefig(os.path.join(output_dir, f'horizontal_accuracy_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
@@ -583,7 +577,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
 
 def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing=False,
                    smoothing_iterations=3, smoothing_factor=0.2, crs='EPSG:6708',
-                   output_filename='model_dataset.png', grid_points=None):
+                   output_filename='model_dataset.png', grid_points=None, show_plot=False):
     """
     Visualizzazione avanzata e stilizzata dei dati della superficie GOCAD (solo ingombro),
     pozzi e sezioni con miglioramenti estetici per una presentazione professionale.
@@ -853,7 +847,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"Figura salvata in: {output_path}")
 
-    plt.show()
+    if show_plot:\n        plt.show()
     plt.close(fig)
     return fig
 
