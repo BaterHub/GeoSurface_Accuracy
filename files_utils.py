@@ -465,11 +465,13 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     if wells_points is not None:
         d_w, _ = nearest_distance(grid_points, wells_points)
         df['dist_wells'] = d_w
+        df['dist_wells_km'] = d_w / 1000.0
         if wells_w is not None:
             df['weight_wells'] = wells_w
     if sections_points is not None:
         d_s, _ = nearest_distance(grid_points, sections_points)
         df['dist_sections'] = d_s
+        df['dist_sections_km'] = d_s / 1000.0
         if sections_w is not None:
             df['weight_sections'] = sections_w
     if combined is not None:
@@ -496,16 +498,22 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         except Exception as e:
             warnings.warn(f"Impossibile salvare heatmap pesi: {e}")
 
-    # Istogrammi distanze
+    # Istogrammi distanze (km)
     try:
         fig_h = plt.figure(figsize=(8, 6))
+        max_km = 0
         if wells_points is not None:
-            plt.hist(df['dist_wells'], bins=40, alpha=0.6, label='Pozzi')
+            max_km = max(max_km, df['dist_wells_km'].max())
+            bins_w = np.arange(df['dist_wells_km'].min(), df['dist_wells_km'].max() + 0.1, 5)
+            plt.hist(df['dist_wells_km'], bins=bins_w, alpha=0.6, label='Pozzi', histtype='step', linewidth=2)
         if sections_points is not None:
-            plt.hist(df['dist_sections'], bins=40, alpha=0.6, label='Sezioni')
-        plt.xlabel('Distanza dal vincolo (m)')
-        plt.ylabel('Occorrenze')
-        plt.title('Distribuzione delle distanze ai vincoli')
+            max_km = max(max_km, df['dist_sections_km'].max())
+            bins_s = np.arange(df['dist_sections_km'].min(), df['dist_sections_km'].max() + 0.1, 5)
+            plt.hist(df['dist_sections_km'], bins=bins_s, alpha=0.6, label='Sezioni', histtype='step', linewidth=2)
+        plt.xlabel('distance from nearest checkpoint (km)')
+        plt.ylabel('occurrences')
+        if max_km > 0:
+            plt.xlim([0, max_km * 1.05])
         if (wells_points is not None) or (sections_points is not None):
             plt.legend()
         plt.savefig(os.path.join(output_dir, f'distance_histogram_{surface_name}.png'), dpi=300, bbox_inches='tight')
@@ -513,17 +521,35 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     except Exception as e:
         warnings.warn(f"Impossibile salvare istogramma distanze: {e}")
 
+    # Interattivo IDW
+    try:
+        import plotly.express as px
+        if combined is not None:
+            df_plot = df.copy()
+            df_plot['weight_plot'] = df_plot['weight_combined'].fillna(0)
+            fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
+                             color_continuous_scale='viridis', range_color=[0, 1],
+                             title=f'IDW {surface_name}', width=900, height=750)
+            fig.update_layout(xaxis_title='X', yaxis_title='Y')
+            fig.write_html(os.path.join(output_dir, f'interactive_idw_{surface_name}.html'))
+    except Exception as e:
+        warnings.warn(f"Impossibile salvare mappa interattiva: {e}")
+
     return {
         'grid_points': grid_points,
         'weights': combined,
         'weights_wells': wells_w,
-        'weights_sections': sections_w
+        'weights_sections': sections_w,
+        'GX': GX,
+        'GY': GY,
+        'dist_wells': df.get('dist_wells_km') if 'dist_wells_km' in df else None,
+        'dist_sections': df.get('dist_sections_km') if 'dist_sections_km' in df else None
     }
 
 
 def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing=False,
                    smoothing_iterations=3, smoothing_factor=0.2, crs='EPSG:6708',
-                   output_filename='model_dataset.png'):
+                   output_filename='model_dataset.png', grid_points=None):
     """
     Visualizzazione avanzata e stilizzata dei dati della superficie GOCAD (solo ingombro),
     pozzi e sezioni con miglioramenti estetici per una presentazione professionale.
@@ -776,6 +802,13 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
 
     fig.text(0.99, 0.01, f"{datetime.now().strftime('%d/%m/%Y %H:%M')}",
              fontsize=7, color='gray', ha='right', va='bottom')
+
+    # Griglia di valutazione
+    if grid_points is not None:
+        try:
+            ax_2d.scatter(grid_points[:, 0], grid_points[:, 1], s=3, color='gray', alpha=0.3, label='Griglia valutazione')
+        except Exception:
+            pass
 
     plt.tight_layout()
 
