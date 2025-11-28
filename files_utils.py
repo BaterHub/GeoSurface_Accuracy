@@ -520,7 +520,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             fig_w = plt.figure(figsize=(10, 8))
             plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
             plt.colorbar(label='Peso (accuratezza orizzontale)')
-                        plt.title('Accuratezza orizzontale (IDW vincoli)')
+            plt.title('Accuratezza orizzontale (IDW vincoli)')
             plt.savefig(os.path.join(output_dir, f'horizontal_accuracy_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
