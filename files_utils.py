@@ -772,7 +772,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                              edgecolor='lightgray',
                              alpha=0.9))
 
-        ax_2d.text(0.98, 1.02, "STATISTICHE SUPERFICIE",
+        ax_2d.text(0.98, 1.02, "STATISTICHE MODELLO",
                    transform=ax_2d.transAxes,
                    fontsize=11,
                    fontweight='bold',
