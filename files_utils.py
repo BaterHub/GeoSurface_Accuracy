@@ -520,7 +520,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             fig_w = plt.figure(figsize=(10, 8))
             plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
             plt.colorbar(label='Peso (accuratezza orizzontale)')
-            plt.title('Accuratezza orizzontale (IDW vincoli)')
+            plt.title(f'Accuratezza orizzontale (IDW) - {surface_name}')
             plt.savefig(os.path.join(output_dir, f'horizontal_accuracy_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
@@ -538,7 +538,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             max_km = max(max_km, df['dist_sections_km'].max())
             bins_s = np.arange(df['dist_sections_km'].min(), df['dist_sections_km'].max() + 0.1, 5)
             plt.hist(df['dist_sections_km'], bins=bins_s, alpha=0.6, label='Sezioni', histtype='step', linewidth=2)
-        plt.xlabel('distance from nearest checkpoint (km)')
+        plt.xlabel(f'distance from nearest checkpoint (km) - {surface_name}')
         plt.ylabel('occurrences')
         if max_km > 0:
             plt.xlim([0, max_km * 1.05])
@@ -577,7 +577,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
 
 def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing=False,
                    smoothing_iterations=3, smoothing_factor=0.2, crs='EPSG:6708',
-                   output_filename='model_dataset.png', grid_points=None, show_plot=False):
+                   output_filename='model_dataset.png', grid_points=None, show_plot=False, surface_name=None):
     """
     Visualizzazione avanzata e stilizzata dei dati della superficie GOCAD (solo ingombro),
     pozzi e sezioni con miglioramenti estetici per una presentazione professionale.
@@ -596,6 +596,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     import os
     from scipy.spatial import ConvexHull
     import time
+    from shapely.geometry import Polygon
 
     start_time = time.time()
     output_dir = "output_results"
@@ -630,7 +631,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                 rect_coords = [(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)]
                 rect_polygon = Polygon(rect_coords)
                 x, y = rect_polygon.exterior.xy
-                ax_2d.fill(x, y, color='steelblue', alpha=0.1, label='Ingombro superfici')
+                ax_2d.fill(x, y, color='steelblue', alpha=0.1, label='Ingombro superficie')
                 ax_2d.plot(x, y, color='steelblue', linewidth=1.5, alpha=0.7)
                 print("Ingombro superfici visualizzato come rettangolo (super-ottimizzato)")
             except Exception as e:
@@ -828,7 +829,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                          edgecolor='lightgray',
                          alpha=0.8))
 
-    fig.text(0.99, 0.01, f"{datetime.now().strftime('%d/%m/%Y %H:%M')}",
+    fig.text(0.99, 0.01, f"{datetime.now().strftime('%d/%m/%Y %H:%M')} - {surface_name or ''}",
              fontsize=7, color='gray', ha='right', va='bottom')
 
     # Griglia di valutazione
