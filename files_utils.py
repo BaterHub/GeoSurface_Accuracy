@@ -369,7 +369,7 @@ def filter_checkpoints_by_edges(edges_df, surface, wells_gdf, sections_gdf):
     return wells_out, sections_out
 
 
-def build_grid(vertices, spacing=5000):
+def build_grid(vertices, spacing=5000, clip_to_hull=True):
     xs, ys = vertices[:, 0], vertices[:, 1]
     min_x, max_x = xs.min(), xs.max()
     min_y, max_y = ys.min(), ys.max()
@@ -377,7 +377,18 @@ def build_grid(vertices, spacing=5000):
     gy = np.arange(min_y, max_y + spacing, spacing)
     GX, GY = np.meshgrid(gx, gy)
     grid_points = np.c_[GX.ravel(), GY.ravel()]
-    return GX, GY, grid_points
+    if clip_to_hull:
+        try:
+            from shapely.geometry import Polygon, Point as ShPoint
+            hull = Polygon(np.c_[xs, ys]).convex_hull
+            mask = np.array([hull.contains(ShPoint(p[0], p[1])) for p in grid_points])
+        except Exception:
+            mask = np.ones(len(grid_points), dtype=bool)
+            hull = None
+    else:
+        mask = np.ones(len(grid_points), dtype=bool)
+        hull = None
+    return GX, GY, grid_points, mask, hull
 
 
 def nearest_distance(points, targets):
@@ -445,7 +456,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     Salva CSV e PNG in output_dir.
     """
     os.makedirs(output_dir, exist_ok=True)
-    GX, GY, grid_points = build_grid(vertices, spacing=grid_spacing)
+    GX, GY, grid_points, mask, hull = build_grid(vertices, spacing=grid_spacing, clip_to_hull=True)
 
     wells_points = None
     sections_points = None
@@ -457,19 +468,20 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         if len(lx) > 0:
             sections_points = np.c_[lx, ly]
 
+    grid_points_use = grid_points[mask]
     combined, wells_w, sections_w = compute_horizontal_weights(
-        grid_points, wells_points, sections_points
+        grid_points_use, wells_points, sections_points
     )
 
-    df = pd.DataFrame({'x': grid_points[:, 0], 'y': grid_points[:, 1]})
+    df = pd.DataFrame({'x': grid_points_use[:, 0], 'y': grid_points_use[:, 1]})
     if wells_points is not None:
-        d_w, _ = nearest_distance(grid_points, wells_points)
+        d_w, _ = nearest_distance(grid_points_use, wells_points)
         df['dist_wells'] = d_w
         df['dist_wells_km'] = d_w / 1000.0
         if wells_w is not None:
             df['weight_wells'] = wells_w
     if sections_points is not None:
-        d_s, _ = nearest_distance(grid_points, sections_points)
+        d_s, _ = nearest_distance(grid_points_use, sections_points)
         df['dist_sections'] = d_s
         df['dist_sections_km'] = d_s / 1000.0
         if sections_w is not None:
@@ -482,7 +494,9 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     # Heatmap
     if combined is not None:
         try:
-            grid_weights = combined.reshape(GX.shape)
+            grid_weights = np.full(GX.shape, np.nan, dtype=float)
+            mask2d = mask.reshape(GX.shape)
+            grid_weights[mask2d] = combined
             fig_w = plt.figure(figsize=(10, 8))
             plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
             plt.colorbar(label='Peso (accuratezza orizzontale)')
@@ -536,7 +550,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         warnings.warn(f"Impossibile salvare mappa interattiva: {e}")
 
     return {
-        'grid_points': grid_points,
+        'grid_points': grid_points_use,
         'weights': combined,
         'weights_wells': wells_w,
         'weights_sections': sections_w,
