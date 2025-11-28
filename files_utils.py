@@ -8,25 +8,18 @@ from shapely.geometry import Point, LineString, MultiPoint, MultiLineString
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
 import matplotlib.colors as mcolors
-from matplotlib import cm
 import networkx as nx
 from scipy.spatial import cKDTree
 from scipy import ndimage
 import warnings
+import pandas as pd
 
 
 # Funzione per leggere il file GOCAD .ts
 def read_gocad_ts(file_path):
     """
-    Legge un file GOCAD .ts e restituisce i vertici e i triangoli
-    Args:
-        file_path (str): Percorso del file GOCAD .ts
-    Returns:
-        tuple: (vertices, triangles) dove vertices e' un array numpy di coordinate (x,y,z)
-               e triangles e' un array numpy di indici dei vertici che formano i triangoli
+    Legge un file GOCAD .ts e restituisce i vertici e i triangoli (un'unica superficie).
     """
-    vertices = []
-    triangles = []
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -41,6 +34,9 @@ def read_gocad_ts(file_path):
     print(f"File {file_path} aperto con successo. Lettura di {len(lines)} linee.")
     vrtx_count = 0
     trgl_count = 0
+    vertices = []
+    triangles = []
+    id_map = {}
 
     for line in lines:
         line = line.strip()
@@ -48,7 +44,9 @@ def read_gocad_ts(file_path):
             parts = line.split()
             if len(parts) >= 5:
                 try:
+                    idx = int(parts[1])
                     x, y, z = float(parts[2]), float(parts[3]), float(parts[4])
+                    id_map[idx] = len(vertices)
                     vertices.append([x, y, z])
                     vrtx_count += 1
                 except (ValueError, IndexError):
@@ -57,9 +55,10 @@ def read_gocad_ts(file_path):
             parts = line.split()
             if len(parts) >= 4:
                 try:
-                    v1, v2, v3 = int(parts[1]) - 1, int(parts[2]) - 1, int(parts[3]) - 1
-                    triangles.append([v1, v2, v3])
-                    trgl_count += 1
+                    v1, v2, v3 = id_map.get(int(parts[1])), id_map.get(int(parts[2])), id_map.get(int(parts[3]))
+                    if None not in (v1, v2, v3):
+                        triangles.append([v1, v2, v3])
+                        trgl_count += 1
                 except (ValueError, IndexError):
                     print(f"Errore nella lettura del triangolo: {line}")
 
@@ -75,6 +74,67 @@ def read_gocad_ts(file_path):
         print("Nessun vertice trovato nel file.")
 
     return vertices_array, triangles_array
+
+
+def read_gocad_ts_multi(file_path):
+    """
+    Legge un file GOCAD .ts con più superfici e restituisce un dict
+    {surface_name: {'vertices': np.array, 'triangles': np.array}}
+    """
+    surfaces = {}
+    current = None
+    vertices = []
+    triangles = []
+    id_map = {}
+    surface_name = None
+    def commit():
+        nonlocal vertices, triangles, id_map, surface_name
+        if surface_name and vertices:
+            surfaces[surface_name] = {
+                'vertices': np.array(vertices),
+                'triangles': np.array(triangles) if triangles else np.array([])
+            }
+        vertices = []
+        triangles = []
+        id_map = {}
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        with open(file_path, 'r', encoding='latin-1') as f:
+            lines = f.readlines()
+
+    for line in lines:
+        s = line.strip()
+        if s.lower().startswith('gocad tsurf'):
+            if vertices:
+                commit()
+            surface_name = None
+        elif s.lower().startswith('name:'):
+            surface_name = s.split(':', 1)[1].strip()
+        elif s.startswith('PVRTX') or s.startswith('VRTX'):
+            parts = s.split()
+            if len(parts) >= 5:
+                try:
+                    idx = int(parts[1])
+                    x, y, z = float(parts[2]), float(parts[3]), float(parts[4])
+                    id_map[idx] = len(vertices)
+                    vertices.append([x, y, z])
+                except Exception:
+                    continue
+        elif s.startswith('TRGL'):
+            parts = s.split()
+            if len(parts) >= 4:
+                try:
+                    v1, v2, v3 = id_map.get(int(parts[1])), id_map.get(int(parts[2])), id_map.get(int(parts[3]))
+                    if None not in (v1, v2, v3):
+                        triangles.append([v1, v2, v3])
+                except Exception:
+                    continue
+    if vertices:
+        commit()
+    return surfaces
 
 
 def process_gocad_file(working_dir):
@@ -257,6 +317,65 @@ def ensure_mapping_file(working_dir, surface_name):
     }
 
 
+def ensure_checkpoint_usage_file(working_dir, surface_names, wells_gdf=None, sections_gdf=None):
+    """
+    Crea un file template che associa pozzi/sezioni alle superfici.
+    Colonne: surface, well_ids, section_ids (liste separate da ';' oppure 'ALL').
+    """
+    path = os.path.join(working_dir, 'surface_checkpoint_mapping.csv')
+    if os.path.exists(path):
+        try:
+            return pd.read_csv(path)
+        except Exception:
+            pass
+    well_ids = []
+    section_ids = []
+    if wells_gdf is not None:
+        if 'NOME_POZZO' in wells_gdf.columns:
+            well_ids = wells_gdf['NOME_POZZO'].astype(str).tolist()
+        else:
+            well_ids = wells_gdf.index.astype(str).tolist()
+    if sections_gdf is not None:
+        if 'NOME' in sections_gdf.columns:
+            section_ids = sections_gdf['NOME'].astype(str).tolist()
+        else:
+            section_ids = sections_gdf.index.astype(str).tolist()
+    rows = []
+    for s in surface_names:
+        rows.append({
+            'surface': s,
+            'well_ids': 'ALL',
+            'section_ids': 'ALL',
+            'map_ids': 'ALL'
+        })
+    df = pd.DataFrame(rows)
+    df.to_csv(path, index=False)
+    print(f"Creato file di mapping checkpoints: {path}")
+    return df
+
+
+def filter_checkpoints_by_mapping(mapping_df, surface, wells_gdf, sections_gdf):
+    wells_out = wells_gdf
+    sections_out = sections_gdf
+    row = mapping_df[mapping_df['surface'] == surface]
+    if not row.empty:
+        well_ids = row.iloc[0].get('well_ids', 'ALL')
+        section_ids = row.iloc[0].get('section_ids', 'ALL')
+        if wells_gdf is not None and well_ids != 'ALL':
+            ids = [i for i in str(well_ids).split(';') if i]
+            if 'NOME_POZZO' in wells_gdf.columns:
+                wells_out = wells_gdf[wells_gdf['NOME_POZZO'].astype(str).isin(ids)]
+            else:
+                wells_out = wells_gdf[wells_gdf.index.astype(str).isin(ids)]
+        if sections_gdf is not None and section_ids != 'ALL':
+            ids = [i for i in str(section_ids).split(';') if i]
+            if 'NOME' in sections_gdf.columns:
+                sections_out = sections_gdf[sections_gdf['NOME'].astype(str).isin(ids)]
+            else:
+                sections_out = sections_gdf[sections_gdf.index.astype(str).isin(ids)]
+    return wells_out, sections_out
+
+
 def build_grid(vertices, spacing=5000):
     xs, ys = vertices[:, 0], vertices[:, 1]
     min_x, max_x = xs.min(), xs.max()
@@ -295,36 +414,43 @@ def sample_lines_gdf(lines_gdf, step=2000):
     return np.array(pts_x), np.array(pts_y)
 
 
-def compute_horizontal_weights(grid_points, wells_points=None, sections_points=None, power=2):
+def compute_order_weight(distances_m, order_p):
+    # r in km
+    r = distances_m / 1000.0
+    ID = 1 / (1 + np.power(r, order_p))
+    ID_min = ID.min()
+    ID_max = ID.max()
+    if ID_max == ID_min:
+        return np.ones_like(ID)
+    return (ID - ID_min) / (ID_max - ID_min)
+
+
+def compute_horizontal_weights(grid_points, wells_points=None, sections_points=None):
     weights_list = []
-    eps = 1e-6
+    wells_w = None
+    sections_w = None
     if wells_points is not None and wells_points.shape[0] > 0:
         dists, _ = nearest_distance(grid_points, wells_points)
-        w = 1 / np.power(dists + eps, power)
-        w = w / w.max()
-        weights_list.append(w)
+        wells_w = compute_order_weight(dists, order_p=1)
+        weights_list.append(wells_w)
     if sections_points is not None and sections_points.shape[0] > 0:
         dists, _ = nearest_distance(grid_points, sections_points)
-        w = 1 / np.power(dists + eps, power)
-        w = w / w.max()
-        weights_list.append(w * 0.7)  # attenua ordine 2
+        sections_w = compute_order_weight(dists, order_p=2)
+        weights_list.append(sections_w)
     if not weights_list:
         return None, None, None
     stack = np.vstack(weights_list)
     combined = stack.mean(axis=0)
-    wells_w = weights_list[0] if weights_list else None
-    sections_w = weights_list[1] if len(weights_list) > 1 else None
     return combined, wells_w, sections_w
 
 
 def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
                               use_wells=True, use_sections=True,
-                              grid_spacing=5000, line_step=2000):
+                              grid_spacing=5000, line_step=2000, surface_name='surface'):
     """
     Calcola pesi orizzontali (IDW) e distribuzioni delle distanze.
     Salva CSV e PNG in output_dir.
     """
-    import pandas as pd
     os.makedirs(output_dir, exist_ok=True)
     GX, GY, grid_points = build_grid(vertices, spacing=grid_spacing)
 
@@ -339,7 +465,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             sections_points = np.c_[lx, ly]
 
     combined, wells_w, sections_w = compute_horizontal_weights(
-        grid_points, wells_points, sections_points, power=2
+        grid_points, wells_points, sections_points
     )
 
     df = pd.DataFrame({'x': grid_points[:, 0], 'y': grid_points[:, 1]})
@@ -356,7 +482,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     if combined is not None:
         df['weight_combined'] = combined
 
-    df.to_csv(os.path.join(output_dir, 'horizontal_accuracy_grid.csv'), index=False)
+    df.to_csv(os.path.join(output_dir, f'horizontal_accuracy_grid_{surface_name}.csv'), index=False)
 
     # Heatmap
     if combined is not None:
@@ -372,7 +498,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             if (wells_points is not None) or (sections_points is not None):
                 plt.legend(loc='lower left', fontsize=8)
             plt.title('Accuratezza orizzontale (IDW vincoli)')
-            plt.savefig(os.path.join(output_dir, 'horizontal_accuracy_idw.png'), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(output_dir, f'horizontal_accuracy_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
             warnings.warn(f"Impossibile salvare heatmap pesi: {e}")
@@ -389,7 +515,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         plt.title('Distribuzione delle distanze ai vincoli')
         if (wells_points is not None) or (sections_points is not None):
             plt.legend()
-        plt.savefig(os.path.join(output_dir, 'distance_histogram.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(output_dir, f'distance_histogram_{surface_name}.png'), dpi=300, bbox_inches='tight')
         plt.close(fig_h)
     except Exception as e:
         warnings.warn(f"Impossibile salvare istogramma distanze: {e}")
