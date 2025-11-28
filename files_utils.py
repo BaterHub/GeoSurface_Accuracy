@@ -601,6 +601,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     start_time = time.time()
     output_dir = "output_results"
     os.makedirs(output_dir, exist_ok=True)
+    grid_label_added = False
 
     # Imposta uno stile; fallback se il tema seaborn recente non e' disponibile
     try:
