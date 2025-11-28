@@ -695,30 +695,22 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
 
     if sections_shp is not None and not sections_shp.empty:
         try:
-            sections_shp.plot(ax=ax_2d, alpha=0, label='_nolegend_')
-
             section_legend = Line2D([0], [0], color='crimson', lw=2, label='Sezioni')
             if 'legend_elements' in locals():
                 legend_elements.append(section_legend)
             else:
                 legend_elements = [section_legend]
 
-            for idx, row in sections_shp.iterrows():
-                if isinstance(row.geometry, (LineString, MultiLineString)):
-                    sections_shp.iloc[[idx]].plot(ax=ax_2d, color='salmon', linewidth=6,
-                                                  alpha=0.3, zorder=7)
-                    sections_shp.iloc[[idx]].plot(ax=ax_2d, color='crimson', linewidth=2.5,
-                                                  alpha=0.9, zorder=8)
-
-                    if isinstance(row.geometry, LineString):
-                        x, y = row.geometry.xy
-                        ax_2d.plot(x, y, color='white', linewidth=1, linestyle=(0, (5, 5)),
-                                   alpha=0.7, zorder=9)
-                    else:
-                        for geom in row.geometry.geoms:
-                            x, y = geom.xy
-                            ax_2d.plot(x, y, color='white', linewidth=1, linestyle=(0, (5, 5)),
-                                       alpha=0.7, zorder=9)
+            for geom in sections_shp.geometry:
+                if geom is None or geom.is_empty:
+                    continue
+                geoms = [geom] if isinstance(geom, LineString) else list(geom.geoms)
+                for g in geoms:
+                    x, y = g.xy
+                    ax_2d.plot(x, y, color='salmon', linewidth=6, alpha=0.3, zorder=7)
+                    ax_2d.plot(x, y, color='crimson', linewidth=2.5, alpha=0.9, zorder=8)
+                    ax_2d.plot(x, y, color='white', linewidth=1, linestyle=(0, (5, 5)),
+                               alpha=0.7, zorder=9)
 
             name_columns = [col for col in sections_shp.columns if any(
                 keyword in col.lower() for keyword in ['name', 'nome', 'id', 'cod', 'ident', 'label', 'num', 'linea', 'line'])]
@@ -764,8 +756,8 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
 
     ax_2d.set_xlabel('X (m)', fontsize=12, fontweight='bold')
     ax_2d.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
-    ax_2d.set_title('Ingombro Modello Geologico, Pozzi e Sezioni',
-                    fontsize=16, fontweight='bold', pad=20)
+    title_txt = f"Ingombro superficie {surface_name}" if surface_name else "Ingombro superficie"
+    ax_2d.set_title(title_txt, fontsize=16, fontweight='bold', pad=20)
 
     if stats_info:
         stats_text = '\n'.join(stats_info)
@@ -779,7 +771,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                              edgecolor='lightgray',
                              alpha=0.9))
 
-        ax_2d.text(0.98, 1.02, "STATISTICHE DEL MODELLO",
+        ax_2d.text(0.98, 1.02, "STATISTICHE SUPERFICIE",
                    transform=ax_2d.transAxes,
                    fontsize=11,
                    fontweight='bold',
@@ -816,6 +808,9 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     ax_2d.add_artist(scalebar)
 
     if 'legend_elements' in locals() and legend_elements:
+        if grid_label_added:
+            legend_elements.append(Line2D([0], [0], marker='s', color='w', markerfacecolor='gray',
+                                          markersize=6, alpha=0.5, label='Griglia valutazione'))
         ax_2d.legend(handles=legend_elements, loc='upper left',
                      frameon=True, framealpha=0.9, edgecolor='lightgray')
 
@@ -833,9 +828,11 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
              fontsize=7, color='gray', ha='right', va='bottom')
 
     # Griglia di valutazione
+    grid_label_added = False
     if grid_points is not None:
         try:
             ax_2d.scatter(grid_points[:, 0], grid_points[:, 1], s=3, color='gray', alpha=0.3, label='Griglia valutazione')
+            grid_label_added = True
         except Exception:
             pass
 
