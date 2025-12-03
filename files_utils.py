@@ -1016,7 +1016,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
                               well_id_field='NOME_POZZO', section_id_field='NOME'):
     """
     Compute vertical confidence from checkpoints with Z (primarily wells).
-    Produces CSV, heatmaps (|?Z| and normalized |?Z|), histogram, and HTML scatter.
+    Produces CSV, heatmaps (|dZ| and normalized |dZ|), and HTML scatter.
     """
     os.makedirs(output_dir, exist_ok=True)
     samples = []
@@ -1113,13 +1113,13 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     df.to_csv(os.path.join(output_dir, f'vertical_confidence_grid_{surface_name}.csv'), index=False)
 
     # Heatmaps
-    def _plot_heat(data, title, fname, cmap='coolwarm'):
+    def _plot_heat(data, title, fname, cmap='coolwarm', vmin=None, vmax=None, cbar_label='Value'):
         try:
             grid_vals = np.full(GX.shape, np.nan, dtype=float)
             grid_vals[mask.reshape(GX.shape)] = data
             fig = plt.figure(figsize=(10, 8))
-            plt.pcolormesh(GX, GY, grid_vals, cmap=cmap, shading='auto')
-            plt.colorbar(label='Value')
+            plt.pcolormesh(GX, GY, grid_vals, cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
+            plt.colorbar(label=cbar_label)
             plt.title(title)
             plt.xlabel('X')
             plt.ylabel('Y')
@@ -1128,10 +1128,14 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
         except Exception as e:
             warnings.warn(f"Could not save vertical heatmap {fname}: {e}")
 
-    _plot_heat(abs_delta_grid, f'Vertical confidence |?Z| - {surface_name}',
-               f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis')
-    _plot_heat(abs_delta_norm, f'Vertical confidence normalized |?Z| - {surface_name}',
-               f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis')
+    _plot_heat(abs_delta_grid, f'Vertical confidence |dZ| (m) - {surface_name}',
+               f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis',
+               vmin=abs_min if np.isfinite(abs_min) else None,
+               vmax=abs_max if np.isfinite(abs_max) else None,
+               cbar_label='|dZ| (m)')
+    _plot_heat(abs_delta_norm, f'Vertical confidence normalized |dZ| - {surface_name}',
+               f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis',
+               vmin=0, vmax=1, cbar_label='normalized |dZ| (1=best)')
 
     # Interactive scatter
     try:
@@ -1140,8 +1144,8 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
         df_plot['abs_delta_norm'] = df_plot['abs_delta_norm'].fillna(0)
         fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
                          color_continuous_scale='viridis', range_color=[0, 1],
-                         title=f'Vertical confidence normalized |?Z| - {surface_name}',
-                         labels={'abs_delta_norm': 'normalized |?Z| (1 = best)'})
+                         title=f'Vertical confidence normalized |dZ| - {surface_name}',
+                         labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
         fig.update_layout(xaxis_title='X', yaxis_title='Y')
         fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'))
     except Exception as e:
