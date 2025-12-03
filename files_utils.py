@@ -868,7 +868,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     plt.tight_layout()
 
     execution_time = time.time() - start_time
-    print(f"Execution time: {execution_time:.2f} secondi")
+    print(f"Execution time: {execution_time:.2f} seconds")
 
     output_path = os.path.join(output_dir, output_filename)
     fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
@@ -1093,6 +1093,9 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     abs_delta_grid = _idw_from_points(abs_delta, pts_xy, grid_points_use, power=idw_power)
     if abs_delta_grid is None:
         return None
+    if len(abs_delta_grid) != len(grid_points_use):
+        warnings.warn(f"Length mismatch in vertical IDW for {surface_name}, skipping.")
+        return None
 
     abs_min = np.nanmin(abs_delta_grid)
     abs_max = np.nanmax(abs_delta_grid)
@@ -1129,20 +1132,6 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
                f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis')
     _plot_heat(abs_delta_norm, f'Vertical confidence normalized |?Z| - {surface_name}',
                f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis')
-
-    # Histogram
-    try:
-        fig_h = plt.figure(figsize=(8, 6))
-        bins = np.linspace(np.nanmin(abs_delta), np.nanmax(abs_delta), 40) if len(abs_delta) > 1 else 10
-        plt.hist(abs_delta, bins=bins, alpha=0.6, label='|Delta Z|', histtype='step', linewidth=2)
-        plt.xlabel('|Delta Z| (m)')
-        plt.ylabel('Occurrences')
-        plt.legend()
-        plt.title(f'Vertical confidence residuals (abs) - {surface_name}')
-        plt.savefig(os.path.join(output_dir, f'vertical_deltaZ_hist_{surface_name}.png'), dpi=300, bbox_inches='tight')
-        plt.close(fig_h)
-    except Exception as e:
-        warnings.warn(f"Could not save vertical histogram: {e}")
 
     # Interactive scatter
     try:
