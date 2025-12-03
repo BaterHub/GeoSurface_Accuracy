@@ -77,16 +77,16 @@ def read_gocad_ts(file_path):
 
 
 def read_gocad_ts_multi(file_path):
-def read_gocad_ts_multi(file_path):
     """
     Read a GOCAD .ts file with multiple surfaces and return a dict:
     {surface_name: {'vertices': np.array, 'triangles': np.array}}
     """
-    current = None
+    surfaces = {}
     vertices = []
     triangles = []
     id_map = {}
     surface_name = None
+
     def commit():
         nonlocal vertices, triangles, id_map, surface_name
         if surface_name and vertices:
