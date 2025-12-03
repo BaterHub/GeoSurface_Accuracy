@@ -1,4 +1,4 @@
-# Importazione delle librerie necessarie
+# Required libraries
 import os
 import pandas as pd
 import numpy as np
@@ -15,10 +15,10 @@ import warnings
 import pandas as pd
 
 
-# Funzione per leggere il file GOCAD .ts
+# Read a single-surface GOCAD .ts file
 def read_gocad_ts(file_path):
     """
-    Legge un file GOCAD .ts e restituisce i vertici e i triangoli (un'unica superficie).
+    Read a GOCAD .ts file and return vertices and triangles (single surface).
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -28,10 +28,10 @@ def read_gocad_ts(file_path):
             with open(file_path, 'r', encoding='latin-1') as f:
                 lines = f.readlines()
         except UnicodeDecodeError:
-            print(f"Impossibile decodificare il file {file_path}. Prova altre codifiche.")
+            print(f"Cannot decode file {file_path}. Try another encoding.")
             return np.array([]), np.array([])
 
-    print(f"File {file_path} aperto con successo. Lettura di {len(lines)} linee.")
+    print(f"Opened file {file_path} successfully. Reading {len(lines)} lines.")
     vrtx_count = 0
     trgl_count = 0
     vertices = []
@@ -50,7 +50,7 @@ def read_gocad_ts(file_path):
                     vertices.append([x, y, z])
                     vrtx_count += 1
                 except (ValueError, IndexError):
-                    print(f"Errore nella lettura del vertice: {line}")
+                    print(f"Error reading vertex: {line}")
         elif line.startswith('TRGL'):
             parts = line.split()
             if len(parts) >= 4:
@@ -60,28 +60,28 @@ def read_gocad_ts(file_path):
                         triangles.append([v1, v2, v3])
                         trgl_count += 1
                 except (ValueError, IndexError):
-                    print(f"Errore nella lettura del triangolo: {line}")
+                    print(f"Error reading triangle: {line}")
 
-    print(f"Trovati {vrtx_count} vertici e {trgl_count} triangoli nel file.")
+    print(f"Found {vrtx_count} vertices and {trgl_count} triangles in the file.")
     vertices_array = np.array(vertices)
     triangles_array = np.array(triangles) if triangles else np.array([])
 
     if len(vertices_array) > 0:
-        print(f"Forma dell'array vertices: {vertices_array.shape}")
+        print(f"Vertices array shape: {vertices_array.shape}")
         if len(vertices_array.shape) == 1:
-            print("Avviso: l'array vertices e' unidimensionale.")
+            print("Warning: vertices array is 1D.")
     else:
-        print("Nessun vertice trovato nel file.")
+        print("No vertices found in the file.")
 
     return vertices_array, triangles_array
 
 
 def read_gocad_ts_multi(file_path):
+def read_gocad_ts_multi(file_path):
     """
-    Legge un file GOCAD .ts con piÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ superfici e restituisce un dict
+    Read a GOCAD .ts file with multiple surfaces and return a dict:
     {surface_name: {'vertices': np.array, 'triangles': np.array}}
     """
-    surfaces = {}
     current = None
     vertices = []
     triangles = []
@@ -142,38 +142,38 @@ def process_gocad_file(working_dir):
         ts_files = [f for f in os.listdir(working_dir) if f.endswith('.ts')]
 
         if not ts_files:
-            print("Nessun file .ts trovato nella cartella di lavoro.")
+            print("No .ts file found in the working folder.")
             return None, None
 
         ts_file = ts_files[0]
         ts_path = os.path.join(working_dir, ts_file)
-        print(f"Lettura del file GOCAD .ts: {ts_file}")
+        print(f"Reading GOCAD .ts file: {ts_file}")
 
         vertices, triangles = read_gocad_ts(ts_path)
 
         if vertices is not None:
             if len(vertices) == 0:
-                print("Nessun vertice trovato nel file GOCAD .ts.")
+                print("No vertices found in the GOCAD .ts file.")
                 return None, None
 
             if not isinstance(vertices, np.ndarray):
                 vertices = np.array(vertices)
 
             if len(vertices.shape) == 1:
-                print("Avviso: l'array vertices e' unidimensionale. Tentativo di rimodellarlo...")
+                print("Warning: vertices array is 1D. Trying to reshape...")
                 if len(vertices) % 3 == 0:
                     vertices = vertices.reshape(-1, 3)
-                    print(f"Array vertices rimodellato con successo: {vertices.shape}")
+                    print(f"Reshaped vertices array: {vertices.shape}")
                 else:
-                    print(f"Impossibile rimodellare l'array vertices. Dimensione non compatibile: {len(vertices)}")
+                    print(f"Could not reshape vertices array. Size not compatible: {len(vertices)}")
 
-            print(f"Letti {len(vertices)} vertici e {len(triangles) if triangles is not None else 0} triangoli.")
+            print(f"Read {len(vertices)} vertices and {len(triangles) if triangles is not None else 0} triangles.")
             print(f"Forma dell'array vertices: {vertices.shape}")
 
         return vertices, triangles
 
     except Exception as e:
-        print(f"Errore durante la lettura del file GOCAD .ts: {e}")
+        print(f"Error while reading GOCAD .ts file: {e}")
         return None, None
 
 
@@ -187,14 +187,14 @@ def read_wells_shapefile(working_dir):
             filename_lower = shp_file.lower()
             if any(keyword in filename_lower for keyword in well_keywords):
                 wells_path = os.path.join(working_dir, shp_file)
-                print(f"Lettura dello shapefile dei pozzi: {shp_file}")
+                print(f"Reading well shapefile: {shp_file}")
                 wells_shp = gpd.read_file(wells_path)
 
                 if wells_shp.geom_type.isin(['Point', 'MultiPoint']).any():
-                    print("Confermato: lo shapefile contiene punti (pozzi).")
+                    print("Confirmed: shapefile contains points (wells).")
                 else:
-                    print(f"Avviso: lo shapefile {shp_file} e' stato identificato come pozzi ma non contiene punti.")
-                    print(f"Tipi di geometria presenti: {wells_shp.geom_type.unique()}")
+                    print(f"Warning: shapefile {shp_file} was identified as wells but has no points.")
+                    print(f"Geometry types present: {wells_shp.geom_type.unique()}")
                 break
 
         if wells_shp is None and shp_files:
@@ -203,43 +203,43 @@ def read_wells_shapefile(working_dir):
                     temp_shp = gpd.read_file(os.path.join(working_dir, shp_file))
                     if temp_shp.geom_type.isin(['Point', 'MultiPoint']).any():
                         wells_path = os.path.join(working_dir, shp_file)
-                        print(f"Trovato shapefile con punti: {shp_file}")
+                        print(f"Found shapefile with points: {shp_file}")
                         wells_shp = temp_shp
                         break
                 except Exception as e:
-                    print(f"Errore durante la lettura di {shp_file}: {e}")
+                    print(f"Error reading {shp_file}: {e}")
 
         if wells_shp is None:
-            print("Nessun shapefile trovato per i pozzi.")
+            print("No shapefile found for wells.")
             return None
 
-        print(f"Colonne disponibili nello shapefile dei pozzi: {wells_shp.columns.tolist()}")
-        print(f"Letto shapefile dei pozzi con {len(wells_shp)} punti.")
+        print(f"Columns available in wells shapefile: {wells_shp.columns.tolist()}")
+        print(f"Letto shapefile dei Wells con {len(wells_shp)} punti.")
         return wells_shp
 
     except Exception as e:
-        print(f"Errore durante la lettura dello shapefile dei pozzi: {e}")
+        print(f"Error reading wells shapefile: {e}")
         return None
 
 
 def read_sections_shapefile(working_dir):
     try:
         shp_files = [f for f in os.listdir(working_dir) if f.endswith('.shp')]
-        section_keywords = ['sez', 'section', 'trac', 'sezione', 'sezioni', 'linea', 'linee', 'sismica', 'sismiche']
+        section_keywords = ['sez', 'section', 'trac', 'sezione', 'sezioni', 'linea', 'linee', 'sismica', 'sismiche', 'line']
 
         sections_shp = None
         for shp_file in shp_files:
             filename_lower = shp_file.lower()
             if any(keyword in filename_lower for keyword in section_keywords):
                 sections_path = os.path.join(working_dir, shp_file)
-                print(f"Lettura dello shapefile delle sezioni: {shp_file}")
+                print(f"Reading section shapefile: {shp_file}")
                 sections_shp = gpd.read_file(sections_path)
 
                 if sections_shp.geom_type.isin(['LineString', 'MultiLineString']).any():
-                    print("Confermato: lo shapefile contiene linee (tracce di sezioni).")
+                    print("Confirmed: shapefile contains lines (section traces).")
                 else:
-                    print(f"Avviso: lo shapefile {shp_file} e' stato identificato come sezioni ma non contiene linee.")
-                    print(f"Tipi di geometria presenti: {sections_shp.geom_type.unique()}")
+                    print(f"Warning: shapefile {shp_file} was identified as sections but has no lines.")
+                    print(f"Geometry types present: {sections_shp.geom_type.unique()}")
                 break
 
         if sections_shp is None and len(shp_files) >= 2:
@@ -248,22 +248,22 @@ def read_sections_shapefile(working_dir):
                     temp_shp = gpd.read_file(os.path.join(working_dir, shp_file))
                     if temp_shp.geom_type.isin(['LineString', 'MultiLineString']).any():
                         sections_path = os.path.join(working_dir, shp_file)
-                        print(f"Trovato shapefile con linee: {shp_file}")
+                        print(f"Found shapefile with lines: {shp_file}")
                         sections_shp = temp_shp
                         break
                 except Exception as e:
-                    print(f"Errore durante la lettura di {shp_file}: {e}")
+                    print(f"Error reading {shp_file}: {e}")
 
         if sections_shp is None:
-            print("Nessun shapefile trovato per le sezioni.")
+            print("No shapefile found for sections.")
             return None
 
-        print(f"Colonne disponibili nello shapefile delle sezioni: {sections_shp.columns.tolist()}")
-        print(f"Letto shapefile delle sezioni con {len(sections_shp)} elementi.")
+        print(f"Columns available in sections shapefile: {sections_shp.columns.tolist()}")
+        print(f"Loaded sections shapefile with {len(sections_shp)} features.")
         return sections_shp
 
     except Exception as e:
-        print(f"Errore durante la lettura dello shapefile delle sezioni: {e}")
+        print(f"Error reading sections shapefile: {e}")
         return None
 
 
@@ -285,8 +285,8 @@ def get_surface_name(working_dir):
 
 def ensure_mapping_file(working_dir, surface_name):
     """
-    Garantisce un file di mapping surface->dati (pozzi/sezioni/mappe).
-    Se assente, crea un template con tutti i dati abilitati eccetto mappe.
+    Ensure a surface->data mapping file (wells/sections/maps).
+    If missing, create a template with wells/sections enabled and maps disabled.
     """
     import pandas as pd
     map_path = os.path.join(working_dir, 'surface_data_mapping.csv')
@@ -298,15 +298,15 @@ def ensure_mapping_file(working_dir, surface_name):
             'use_maps': 0
         }])
         df.to_csv(map_path, index=False)
-        print(f"Creato file di mapping: {map_path}")
+        print(f"Created mapping file: {map_path}")
     try:
         df = pd.read_csv(map_path)
     except Exception as e:
-        print(f"Impossibile leggere {map_path}: {e}. Uso impostazioni di default.")
+        print(f"Could not read {map_path}: {e}. Using default settings.")
         return {'use_wells': True, 'use_sections': True, 'use_maps': False}
     row = df[df['surface'] == surface_name]
     if row.empty:
-        print(f"Nessuna riga per la superficie {surface_name} in mapping. Uso default.")
+        print(f"No row for surface {surface_name} in mapping. Using defaults.")
         return {'use_wells': True, 'use_sections': True, 'use_maps': False}
     def bool_val(col):
         return bool(row.iloc[0].get(col, 1))
@@ -319,9 +319,9 @@ def ensure_mapping_file(working_dir, surface_name):
 
 def ensure_checkpoint_edges_file(working_dir, surface_names, wells_gdf=None, sections_gdf=None):
     """
-    Garantisce un file edge list surface-checkpoint-type.
-    Colonne: surface, checkpoint_id, type (well|section|map).
-    Template: una riga 'ALL' per wells e sections per ogni superficie.
+    Ensure a surface-checkpoint-type edge list.
+    Columns: surface, checkpoint_id, type (well|section|map).
+    Template: one 'ALL' row for wells and sections per surface.
     """
     path = os.path.join(working_dir, 'surface_checkpoint_edges.csv')
     if os.path.exists(path):
@@ -336,7 +336,7 @@ def ensure_checkpoint_edges_file(working_dir, surface_names, wells_gdf=None, sec
         rows.append({'surface': s, 'checkpoint_id': 'NONE', 'type': 'map'})
     df = pd.DataFrame(rows)
     df.to_csv(path, index=False)
-    print(f"Creato file edge list checkpoints: {path}")
+    print(f"Created checkpoint edge list: {path}")
     return df
 
 
@@ -351,14 +351,14 @@ def filter_checkpoints_by_edges(edges_df, surface, wells_gdf, sections_gdf):
     # normalizza edges
     subset_ids = norm_series(subset['checkpoint_id'])
     subset_types = norm_series(subset['type'])
-    # pozzi
+    # Wells
     if wells_gdf is not None:
         wells_ids = norm_series(wells_gdf['NOME_POZZO']) if 'NOME_POZZO' in wells_gdf.columns else norm_series(wells_gdf.index.to_series())
         wells_sel = subset[(subset_types == 'well')]
         if not wells_sel.empty and 'all' not in subset_ids[wells_sel.index].unique():
             ids = subset_ids[wells_sel.index].tolist()
             wells_out = wells_gdf[wells_ids.isin(ids)]
-    # sezioni
+    # Sections
     if sections_gdf is not None:
         sec_ids = norm_series(sections_gdf['NOME']) if 'NOME' in sections_gdf.columns else norm_series(sections_gdf.index.to_series())
         sec_sel = subset[(subset_types == 'section')]
@@ -366,7 +366,7 @@ def filter_checkpoints_by_edges(edges_df, surface, wells_gdf, sections_gdf):
             ids = subset_ids[sec_sel.index].tolist()
             sections_out = sections_gdf[sec_ids.isin(ids)]
     return wells_out, sections_out
-    # pozzi
+    # Wells
     wells_edges = subset[subset['type'].str.lower() == 'well']
     if wells_gdf is not None and not wells_edges.empty:
         ids = wells_edges['checkpoint_id'].astype(str).tolist()
@@ -376,7 +376,7 @@ def filter_checkpoints_by_edges(edges_df, surface, wells_gdf, sections_gdf):
                 wells_out = wells_gdf[wells_gdf['NOME_POZZO'].astype(str).isin(ids)]
             else:
                 wells_out = wells_gdf[wells_gdf.index.astype(str).isin(ids)]
-    # sezioni
+    # Sections
     sec_edges = subset[subset['type'].str.lower() == 'section']
     if sections_gdf is not None and not sec_edges.empty:
         ids = sec_edges['checkpoint_id'].astype(str).tolist()
@@ -524,7 +524,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             plt.savefig(os.path.join(output_dir, f'horizontal_accuracy_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
-            warnings.warn(f"Impossibile salvare heatmap pesi: {e}")
+            warnings.warn(f"Could not save weight heatmap: {e}")
 
     # Istogrammi distanze (km)
     try:
@@ -533,11 +533,11 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         if wells_points is not None:
             max_km = max(max_km, df['dist_wells_km'].max())
             bins_w = np.arange(df['dist_wells_km'].min(), df['dist_wells_km'].max() + 0.1, 5)
-            plt.hist(df['dist_wells_km'], bins=bins_w, alpha=0.6, label='Pozzi', histtype='step', linewidth=2)
+            plt.hist(df['dist_wells_km'], bins=bins_w, alpha=0.6, label='Wells', histtype='step', linewidth=2)
         if sections_points is not None:
             max_km = max(max_km, df['dist_sections_km'].max())
             bins_s = np.arange(df['dist_sections_km'].min(), df['dist_sections_km'].max() + 0.1, 5)
-            plt.hist(df['dist_sections_km'], bins=bins_s, alpha=0.6, label='Sezioni', histtype='step', linewidth=2)
+            plt.hist(df['dist_sections_km'], bins=bins_s, alpha=0.6, label='Sections', histtype='step', linewidth=2)
         plt.xlabel(f'distance from nearest checkpoint (km) - {surface_name}')
         plt.ylabel('occurrences')
         if max_km > 0:
@@ -547,7 +547,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         plt.savefig(os.path.join(output_dir, f'distance_histogram_{surface_name}.png'), dpi=300, bbox_inches='tight')
         plt.close(fig_h)
     except Exception as e:
-        warnings.warn(f"Impossibile salvare istogramma distanze: {e}")
+        warnings.warn(f"Could not save distance histogram: {e}")
 
     # Interattivo IDW
     try:
@@ -561,7 +561,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             fig.update_layout(xaxis_title='X', yaxis_title='Y')
             fig.write_html(os.path.join(output_dir, f'interactive_idw_{surface_name}.html'))
     except Exception as e:
-        warnings.warn(f"Impossibile salvare mappa interattiva: {e}")
+        warnings.warn(f"Could not save interactive map: {e}")
 
     return {
         'grid_points': grid_points_use,
@@ -579,9 +579,8 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                    smoothing_iterations=3, smoothing_factor=0.2, crs='EPSG:6708',
                    output_filename='model_dataset.png', grid_points=None, show_plot=False, surface_name=None):
     """
-    Visualizzazione avanzata e stilizzata dei dati della superficie GOCAD (solo ingombro),
-    pozzi e sezioni con miglioramenti estetici per una presentazione professionale.
-    Versione ottimizzata per prestazioni migliori usando un poligono di contorno.
+    Styled visualization of the GOCAD surface footprint (only extent), wells, and sections
+    with presentation-friendly styling. Optimized version using a bounding polygon for better performance.
     """
     import matplotlib.pyplot as plt
     from matplotlib.tri import Triangulation
@@ -603,7 +602,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     os.makedirs(output_dir, exist_ok=True)
     grid_label_added = False
 
-    # Imposta uno stile; fallback se il tema seaborn recente non e' disponibile
+    # Set a style; fallback if the seaborn theme is unavailable
     try:
         plt.style.use('seaborn-v0_8-whitegrid')
     except OSError:
@@ -621,7 +620,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
             vertices = smooth_surface(vertices, triangles,
                                      iterations=smoothing_iterations,
                                      factor=smoothing_factor)
-            print(f"Smoothing applicato alle superfici (iterazioni: {smoothing_iterations}, fattore: {smoothing_factor})")
+            print(f"Smoothing applied to surfaces (iterations: {smoothing_iterations}, factor: {smoothing_factor})")
 
     if vertices is not None and len(vertices) > 0:
         if len(vertices.shape) == 2 and vertices.shape[1] >= 2:
@@ -632,11 +631,11 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                 rect_coords = [(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)]
                 rect_polygon = Polygon(rect_coords)
                 x, y = rect_polygon.exterior.xy
-                ax_2d.fill(x, y, color='steelblue', alpha=0.1, label='Ingombro modello e dati')
+                ax_2d.fill(x, y, color='steelblue', alpha=0.1, label='Model and data footprint')
                 ax_2d.plot(x, y, color='steelblue', linewidth=1.5, alpha=0.7)
-                print("Ingombro superfici visualizzato come rettangolo (super-ottimizzato)")
+                print("Surface footprint shown as rectangle (fast mode)")
             except Exception as e:
-                print(f"Errore nella visualizzazione dell'ingombro ottimizzato: {e}")
+                print(f"Error drawing optimized footprint: {e}")
                 try:
                     points_2d = vertices[:, :2]
                     min_x, min_y = np.min(points_2d, axis=0)
@@ -644,19 +643,19 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                     ax_2d.plot([min_x, max_x, max_x, min_x, min_x],
                                [min_y, min_y, max_y, max_y, min_y],
                                color='steelblue', linewidth=1.5, alpha=0.7,
-                               label='Ingombro superfici (box)')
+                               label='Surface footprint (box)')
                 except Exception as e2:
-                    print(f"Fallback a visualizzazione punti: {e2}")
+                    print(f"Fallback to point visualization: {e2}")
                     if len(vertices) > 500:
                         sampling_rate = max(1, len(vertices) // 500)
                         sampled_vertices = vertices[::sampling_rate]
                         ax_2d.scatter(sampled_vertices[:, 0], sampled_vertices[:, 1], s=2, alpha=0.6,
-                                      c='steelblue', label='Vertici GOCAD (campionati)', edgecolors='none')
+                                      c='steelblue', label='GOCAD vertices (sampled)', edgecolors='none')
                     else:
                         ax_2d.scatter(vertices[:, 0], vertices[:, 1], s=2, alpha=0.6,
-                                      c='steelblue', label='Vertici GOCAD', edgecolors='none')
+                                      c='steelblue', label='GOCAD vertices', edgecolors='none')
         else:
-            print(f"Avviso: vertices ha una forma non valida per la visualizzazione: {vertices.shape}")
+            print(f"Warning: vertices has an invalid shape for visualization: {vertices.shape}")
 
     if wells_shp is not None and not wells_shp.empty:
         try:
@@ -673,7 +672,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                                   edgecolors='white', linewidths=1, zorder=12)
 
             legend_elements = [Line2D([0], [0], marker='o', color='w', markerfacecolor='darkblue',
-                                      markersize=10, label='Pozzi', markeredgecolor='white')]
+                                      markersize=10, label='Wells', markeredgecolor='white')]
 
             name_columns = [col for col in wells_shp.columns if any(
                 keyword in col.lower() for keyword in ['name', 'nome', 'id', 'cod', 'ident', 'label', 'num'])]
@@ -691,12 +690,12 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                                              bbox=dict(boxstyle="round,pad=0.3", fc='royalblue', ec="none", alpha=0.7))
                         txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='navy')])
         except Exception as e:
-            print(f"Errore durante la visualizzazione avanzata dei pozzi: {e}")
-            wells_shp.plot(ax=ax_2d, color='blue', markersize=50, label='Pozzi')
+            print(f"Error during advanced well visualization: {e}")
+            wells_shp.plot(ax=ax_2d, color='blue', markersize=50, label='Wells')
 
     if sections_shp is not None and not sections_shp.empty:
         try:
-            section_legend = Line2D([0], [0], color='crimson', lw=2, label='Sezioni')
+            section_legend = Line2D([0], [0], color='crimson', lw=2, label='Sections')
             if 'legend_elements' in locals():
                 legend_elements.append(section_legend)
             else:
@@ -731,39 +730,40 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                                              bbox=dict(boxstyle="round,pad=0.3", fc='crimson', ec="none", alpha=0.7))
                         txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='darkred')])
         except Exception as e:
-            print(f"Errore durante la visualizzazione avanzata delle sezioni: {e}")
-            sections_shp.plot(ax=ax_2d, color='red', linewidth=2, label='Sezioni')
+            print(f"Errore durante la visualizzazione avanzata delle Sections: {e}")
+            sections_shp.plot(ax=ax_2d, color='red', linewidth=2, label='Sections')
 
     stats_info = []
 
     if triangles is not None and len(triangles) > 0:
         num_triangles = len(triangles)
         num_vertices = len(vertices) if vertices is not None else 0
-        stats_info.append(f"Triangoli: {num_triangles:,}")
+        stats_info.append(f"Triangles: {num_triangles:,}")
 
         if vertices is not None and len(vertices.shape) == 2 and vertices.shape[1] >= 3:
             z_min, z_max = np.min(vertices[:, 2]), np.max(vertices[:, 2])
             z_mean = np.mean(vertices[:, 2])
-            stats_info.append(f"Elevazione min: {z_min:.2f} m")
-            stats_info.append(f"Elevazione max: {z_max:.2f} m")
+            stats_info.append(f"Min elevation: {z_min:.2f} m")
+            stats_info.append(f"Max elevation: {z_max:.2f} m")
 
     if wells_shp is not None and not wells_shp.empty:
         num_wells = len(wells_shp)
-        stats_info.append(f"Pozzi: {num_wells}")
+        stats_info.append(f"Wells: {num_wells}")
 
     if sections_shp is not None and not sections_shp.empty:
         num_sections = len(sections_shp)
-        stats_info.append(f"Sezioni: {num_sections}")
+        stats_info.append(f"Sections: {num_sections}")
 
     ax_2d.set_xlabel('X (m)', fontsize=12, fontweight='bold')
     ax_2d.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
-    is_model = surface_name and str(surface_name).lower().startswith('modello')
+    lower_name = str(surface_name).lower() if surface_name else ''
+    is_model = lower_name.startswith('modello') or lower_name.startswith('model')
     if is_model:
-        title_txt = "Ingombro modello e dati"
-        stats_title = "STATISTICHE MODELLO"
+        title_txt = "Model and data footprint"
+        stats_title = "MODEL STATS"
     else:
-        title_txt = f"Ingombro superficie {surface_name}" if surface_name else "Ingombro superficie"
-        stats_title = "STATISTICHE SUPERFICIE"
+        title_txt = f"Surface footprint {surface_name}" if surface_name else "Surface footprint"
+        stats_title = "SURFACE STATS"
     ax_2d.set_title(title_txt, fontsize=16, fontweight='bold', pad=20)
 
     if stats_info:
@@ -820,7 +820,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                                           markersize=6, alpha=0.5, label='Griglia valutazione'))
         ax_2d.legend(handles=legend_elements, loc='upper left', frameon=True, framealpha=0.9, edgecolor='lightgray')
 
-    ax_2d.text(0.02, 0.02, f"Sistema di coordinate: {crs}",
+    ax_2d.text(0.02, 0.02, f"Coordinate system: {crs}",
                transform=ax_2d.transAxes,
                fontsize=8,
                verticalalignment='bottom',
@@ -845,11 +845,11 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     plt.tight_layout()
 
     execution_time = time.time() - start_time
-    print(f"Tempo di esecuzione: {execution_time:.2f} secondi")
+    print(f"Execution time: {execution_time:.2f} secondi")
 
     output_path = os.path.join(output_dir, output_filename)
     fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
-    print(f"Figura salvata in: {output_path}")
+    print(f"Figure saved to: {output_path}")
 
     if show_plot:
         plt.show()
@@ -859,7 +859,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
 
 def smooth_surface(vertices, triangles, iterations=3, factor=0.2):
     """
-    Applica smoothing laplaciano alla superficie
+    Apply Laplacian smoothing to the surface
     """
     import numpy as np
 
@@ -894,3 +894,4 @@ def smooth_surface(vertices, triangles, iterations=3, factor=0.2):
         smoothed_vertices = new_vertices
 
     return smoothed_vertices
+
