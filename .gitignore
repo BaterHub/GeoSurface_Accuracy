@@ -1,1 +1,4 @@
 __pycache__/
+
+# Local docs not tracked
+docs/
