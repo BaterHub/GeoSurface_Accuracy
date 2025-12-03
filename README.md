@@ -32,7 +32,7 @@ pip install -r requirements.txt
   - `horizons.ts` (all surface geometries)
   - `pozzi_idrocarburi.*` (field `NOME_POZZO`)
   - `linee_sismiche.*` (field `NOME`)
-  - `surface_data_mapping.csv` — flags per surface: `surface,use_wells,use_sections,use_maps`.
+  - `surface_data_mapping.csv` — flags per surface: `surface,use_wells,use_sections,use_maps,use_vertical` (1/0).
   - `surface_checkpoint_edges.csv` — edge list `surface,checkpoint_id,type` (`type`: well/section/map; `checkpoint_id` must match `NOME_POZZO`/`NOME`; use `ALL` to include every item).
   - `output_results/` — generated PNG/CSV/HTML.
 
@@ -52,8 +52,8 @@ Populate `working_files_folder` with the .ts file, shapefiles, and mapping CSVs,
 4. Run starting from the “RUN THE SCRIPT” cell. Outputs go to `output_results`.
 
 ## Mapping notes
-- `surface_data_mapping.csv`: for each surface, toggle the use of wells/sections/maps (1/0).
-- `surface_checkpoint_edges.csv`: many-to-many surface–checkpoint edge list with type; `checkpoint_id` values must match shapefile fields; `ALL` includes the full dataset.
+- `surface_data_mapping.csv`: per-surface toggles for wells/sections/maps and vertical processing (1/0). `use_vertical` enables vertical confidence when checkpoints have Z values.
+- `surface_checkpoint_edges.csv`: many-to-many surface–checkpoint edge list. Columns: `surface,checkpoint_id,type` where `type` is `well`/`section`/`map` and `checkpoint_id` matches `NOME_POZZO` or `NOME`; `ALL` includes all checkpoints of that type.
 
 ## Outputs
 - Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv`, `horizontal_confidence_idw_<surface>.png`, `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html`, `distance_histogram_<surface>.png`.
