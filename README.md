@@ -7,7 +7,7 @@
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/BaterHub/GeoSurface_Accuracy/blob/main/GeoSurface_Accuracy.ipynb)
 
-Notebook and utilities to estimate the horizontal accuracy of geological surfaces in GOCAD (.ts) format, using wells and sections (shapefiles) with ID weights = 1/(1 + r^p) normalized (IDW) on an evaluation grid.
+Notebook and utilities to estimate horizontal confidence of geological surfaces in GOCAD (.ts) format, using wells and sections (shapefiles) with ID weights = 1/(1 + r^p) normalized (IDW) on an evaluation grid. Optional vertical confidence maps are produced when checkpoints carry Z values.
 
 ## Features
 - Read multi-surface .ts files and build a grid (configurable step, clipped on hull).
@@ -56,5 +56,6 @@ Populate `working_files_folder` with the .ts file, shapefiles, and mapping CSVs,
 - `surface_checkpoint_edges.csv`: many-to-many surface–checkpoint edge list with type; `checkpoint_id` values must match shapefile fields; `ALL` includes the full dataset.
 
 ## Outputs
-- Per surface: `model_dataset_<surface>.png`, `horizontal_accuracy_grid_<surface>.csv`, `horizontal_accuracy_idw_<surface>.png`, `interactive_idw_<surface>.html`, `distance_histogram_<surface>.png`.
+- Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv`, `horizontal_confidence_idw_<surface>.png`, `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html`, `distance_histogram_<surface>.png`.
+- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv`, `vertical_deltaZ_<surface>.png`, `vertical_abs_deltaZ_<surface>.png`, `vertical_deltaZ_hist_<surface>.png`, `vertical_deltaZ_<surface>.html`.
 - Whole model: `model_dataset.png`.

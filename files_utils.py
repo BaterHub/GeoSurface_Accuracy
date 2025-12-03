@@ -13,6 +13,7 @@ from scipy.spatial import cKDTree
 from scipy import ndimage
 import warnings
 import pandas as pd
+from scipy.interpolate import LinearNDInterpolator
 
 
 # Read a single-surface GOCAD .ts file
@@ -472,8 +473,8 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
                               use_wells=True, use_sections=True,
                               grid_spacing=5000, line_step=2000, surface_name='surface'):
     """
-    Calcola pesi orizzontali (IDW) e distribuzioni delle distanze.
-    Salva CSV e PNG in output_dir.
+    Compute horizontal confidence weights (IDW) and distance distributions.
+    Saves CSV/PNG/HTML in output_dir.
     """
     os.makedirs(output_dir, exist_ok=True)
     GX, GY, grid_points, mask, hull = build_grid(vertices, spacing=grid_spacing, clip_to_hull=True)
@@ -509,7 +510,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     if combined is not None:
         df['weight_combined'] = combined
 
-    df.to_csv(os.path.join(output_dir, f'horizontal_accuracy_grid_{surface_name}.csv'), index=False)
+    df.to_csv(os.path.join(output_dir, f'horizontal_confidence_grid_{surface_name}.csv'), index=False)
 
     # Heatmap
     if combined is not None:
@@ -519,12 +520,31 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             grid_weights[mask2d] = combined
             fig_w = plt.figure(figsize=(10, 8))
             plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
-            plt.colorbar(label='Peso (accuratezza orizzontale)')
-            plt.title(f'Accuratezza orizzontale (IDW) - {surface_name}')
-            plt.savefig(os.path.join(output_dir, f'horizontal_accuracy_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
+            plt.colorbar(label='Confidence weight')
+            plt.title(f'Horizontal confidence (IDW) - {surface_name}')
+            plt.savefig(os.path.join(output_dir, f'horizontal_confidence_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
             warnings.warn(f"Could not save weight heatmap: {e}")
+
+        # Sorted confidence plot
+        try:
+            sorted_idx = np.argsort(combined)[::-1]
+            weights_sorted = combined[sorted_idx]
+            x_idx = np.arange(1, len(weights_sorted) + 1)
+            fig_rank = plt.figure(figsize=(10, 6))
+            plt.plot(x_idx, weights_sorted, color='steelblue', linewidth=1.5)
+            plt.fill_between(x_idx, weights_sorted, color='steelblue', alpha=0.1)
+            plt.xlabel('Grid node (sorted by confidence desc.)')
+            plt.ylabel('Confidence weight (IDW avg)')
+            plt.title(f'Horizontal confidence ranking - {surface_name}')
+            plt.xlim(1, len(weights_sorted))
+            plt.ylim(0, max(1.0, np.nanmax(weights_sorted) * 1.05))
+            plt.grid(alpha=0.2)
+            plt.savefig(os.path.join(output_dir, f'horizontal_confidence_rank_{surface_name}.png'), dpi=300, bbox_inches='tight')
+            plt.close(fig_rank)
+        except Exception as e:
+            warnings.warn(f"Could not save confidence ranking plot: {e}")
 
     # Istogrammi distanze (km)
     try:
@@ -556,10 +576,10 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             df_plot = df.copy()
             df_plot['weight_plot'] = df_plot['weight_combined'].fillna(0)
             fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
-                             color_continuous_scale='viridis', range_color=[0, 1],
-                             title=f'IDW {surface_name}', width=900, height=750)
+                              color_continuous_scale='viridis', range_color=[0, 1],
+                              title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
             fig.update_layout(xaxis_title='X', yaxis_title='Y')
-            fig.write_html(os.path.join(output_dir, f'interactive_idw_{surface_name}.html'))
+            fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'))
     except Exception as e:
         warnings.warn(f"Could not save interactive map: {e}")
 
@@ -570,6 +590,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         'weights_sections': sections_w,
         'GX': GX,
         'GY': GY,
+        'mask': mask,
         'dist_wells': df.get('dist_wells_km') if 'dist_wells_km' in df else None,
         'dist_sections': df.get('dist_sections_km') if 'dist_sections_km' in df else None
     }
@@ -855,6 +876,186 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
         plt.show()
     plt.close(fig)
     return fig
+
+
+def _extract_point_z(gdf, preferred_names=None):
+    """
+    Extract (x, y, z) tuples from a GeoDataFrame of points, using geometry Z when present
+    or falling back to a numeric attribute with a Z-like name.
+    """
+    if gdf is None or gdf.empty:
+        return []
+    preferred_names = preferred_names or ['z', 'Z', 'quota', 'elev', 'elevation', 'depth', 'quota_m', 'depth_m']
+    z_col = None
+    cols_lower = {c.lower(): c for c in gdf.columns if c != 'geometry'}
+    for name in preferred_names:
+        if name.lower() in cols_lower:
+            col = cols_lower[name.lower()]
+            if pd.api.types.is_numeric_dtype(gdf[col]):
+                z_col = col
+                break
+    points = []
+    for _, row in gdf.iterrows():
+        geom = row.geometry
+        if geom is None or geom.is_empty:
+            continue
+        x = getattr(geom, 'x', None) if hasattr(geom, 'x') else None
+        y = getattr(geom, 'y', None) if hasattr(geom, 'y') else None
+        z_val = None
+        if hasattr(geom, 'has_z') and geom.has_z:
+            try:
+                z_val = geom.z
+            except Exception:
+                z_val = None
+        if z_val is None and z_col is not None:
+            try:
+                z_val = float(row[z_col])
+            except Exception:
+                z_val = None
+        if x is None or y is None or z_val is None or pd.isna(z_val):
+            continue
+        points.append((x, y, z_val))
+    return points
+
+
+def _idw_from_points(values, points_xy, grid_points, power=2):
+    """
+    Compute IDW on given grid_points from sample points.
+    values: array of shape (n,)
+    points_xy: array (n,2)
+    grid_points: array (m,2)
+    returns array (m,)
+    """
+    if len(values) == 0 or len(grid_points) == 0:
+        return None
+    pts = np.asarray(points_xy)
+    vals = np.asarray(values)
+    tree = cKDTree(pts)
+    k = min(8, len(pts))
+    dists, idxs = tree.query(grid_points, k=k)
+    # ensure 2D arrays
+    dists = np.atleast_2d(dists)
+    idxs = np.atleast_2d(idxs)
+    dists = np.where(dists == 0, 1e-9, dists)
+    weights = 1.0 / np.power(dists, power)
+    vals_sel = vals[idxs]
+    weighted = vals_sel * weights
+    num = np.nansum(weighted, axis=1)
+    denom = np.nansum(weights, axis=1)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        res = np.divide(num, denom)
+    return res
+
+
+def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid_points_use,
+                              GX, GY, mask, output_dir, surface_name, idw_power=2):
+    """
+    Compute vertical confidence from checkpoints with Z (primarily wells).
+    Produces CSV, heatmaps (delta Z and |delta Z|), histogram, and HTML scatter.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    # Collect sample points with Z
+    samples = []
+    wells_pts = _extract_point_z(wells_shp)
+    if wells_pts:
+        samples.extend(wells_pts)
+    # sections rarely have Z; include only if present
+    sections_pts = _extract_point_z(sections_shp)
+    if sections_pts:
+        samples.extend(sections_pts)
+    if not samples:
+        print("No checkpoints with Z found; skipping vertical confidence.")
+        return None
+
+    samples = np.array(samples)
+    pts_xy = samples[:, :2]
+    pts_z = samples[:, 2]
+
+    # Interpolate surface Z
+    if vertices is None or len(vertices) == 0:
+        print("No vertices available for vertical confidence.")
+        return None
+    interp = LinearNDInterpolator(vertices[:, :2], vertices[:, 2])
+    z_model = interp(pts_xy)
+    mask_valid = ~np.isnan(z_model)
+    if not mask_valid.any():
+        print("Surface interpolation failed for all checkpoints; skipping vertical confidence.")
+        return None
+    pts_xy = pts_xy[mask_valid]
+    pts_z = pts_z[mask_valid]
+    z_model = z_model[mask_valid]
+    delta_z = pts_z - z_model
+    abs_delta = np.abs(delta_z)
+
+    # IDW over grid
+    delta_grid = _idw_from_points(delta_z, pts_xy, grid_points_use, power=idw_power)
+    abs_delta_grid = _idw_from_points(abs_delta, pts_xy, grid_points_use, power=idw_power)
+    if delta_grid is None or abs_delta_grid is None:
+        return None
+
+    df = pd.DataFrame({
+        'x': grid_points_use[:, 0],
+        'y': grid_points_use[:, 1],
+        'delta_z': delta_grid,
+        'abs_delta_z': abs_delta_grid
+    })
+    df.to_csv(os.path.join(output_dir, f'vertical_confidence_grid_{surface_name}.csv'), index=False)
+
+    # Heatmaps
+    def _plot_heat(data, title, fname, cmap='coolwarm'):
+        try:
+            grid_vals = np.full(GX.shape, np.nan, dtype=float)
+            grid_vals[mask.reshape(GX.shape)] = data
+            fig = plt.figure(figsize=(10, 8))
+            plt.pcolormesh(GX, GY, grid_vals, cmap=cmap, shading='auto')
+            plt.colorbar(label='Delta Z (m)')
+            plt.title(title)
+            plt.xlabel('X')
+            plt.ylabel('Y')
+            plt.savefig(os.path.join(output_dir, fname), dpi=300, bbox_inches='tight')
+            plt.close(fig)
+        except Exception as e:
+            warnings.warn(f"Could not save vertical heatmap {fname}: {e}")
+
+    _plot_heat(delta_grid, f'Vertical confidence (delta Z) - {surface_name}',
+               f'vertical_deltaZ_{surface_name}.png')
+    _plot_heat(abs_delta_grid, f'Vertical confidence |delta Z| - {surface_name}',
+               f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis')
+
+    # Histogram
+    try:
+        fig_h = plt.figure(figsize=(8, 6))
+        bins = np.linspace(np.nanmin(delta_z), np.nanmax(delta_z), 40) if len(delta_z) > 1 else 10
+        plt.hist(delta_z, bins=bins, alpha=0.6, label='Delta Z', histtype='step', linewidth=2)
+        plt.hist(abs_delta, bins=30, alpha=0.6, label='|Delta Z|', histtype='step', linewidth=2)
+        plt.xlabel('Delta Z (m)')
+        plt.ylabel('Occurrences')
+        plt.legend()
+        plt.title(f'Vertical confidence residuals - {surface_name}')
+        plt.savefig(os.path.join(output_dir, f'vertical_deltaZ_hist_{surface_name}.png'), dpi=300, bbox_inches='tight')
+        plt.close(fig_h)
+    except Exception as e:
+        warnings.warn(f"Could not save vertical histogram: {e}")
+
+    # Interactive scatter
+    try:
+        import plotly.express as px
+        df_plot = df.copy()
+        df_plot['abs_delta_z'] = df_plot['abs_delta_z'].fillna(0)
+        fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_z',
+                         color_continuous_scale='viridis',
+                         title=f'Vertical confidence |delta Z| - {surface_name}',
+                         labels={'abs_delta_z': '|delta Z| (m)'})
+        fig.update_layout(xaxis_title='X', yaxis_title='Y')
+        fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'))
+    except Exception as e:
+        warnings.warn(f"Could not save vertical interactive map: {e}")
+
+    return {
+        'delta_grid': delta_grid,
+        'abs_delta_grid': abs_delta_grid,
+        'samples': len(delta_z)
+    }
 
 
 def smooth_surface(vertices, triangles, iterations=3, factor=0.2):
