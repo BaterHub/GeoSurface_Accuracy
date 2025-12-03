@@ -60,5 +60,5 @@ Populate `working_files_folder` with the .ts file, shapefiles, and mapping CSVs,
 
 ## Outputs
 - Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv`, `horizontal_confidence_idw_<surface>.png`, `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html`, `distance_histogram_<surface>.png`.
-- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv`, `vertical_deltaZ_<surface>.png`, `vertical_abs_deltaZ_<surface>.png`, `vertical_deltaZ_hist_<surface>.png`, `vertical_deltaZ_<surface>.html`.
+- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv` (includes normalized ΔZ), `vertical_deltaZ_<surface>.png`, `vertical_deltaZ_norm_<surface>.png`, `vertical_abs_deltaZ_<surface>.png`, `vertical_deltaZ_hist_<surface>.png`, `vertical_deltaZ_<surface>.html`.
 - Whole model: `model_dataset.png`.

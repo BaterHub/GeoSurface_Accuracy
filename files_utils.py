@@ -1053,11 +1053,20 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     if delta_grid is None or abs_delta_grid is None:
         return None
 
+    # Normalize delta grid: 1 - (delta - min)/(max - min)
+    delta_min = np.nanmin(delta_grid)
+    delta_max = np.nanmax(delta_grid)
+    if np.isfinite(delta_min) and np.isfinite(delta_max) and delta_max != delta_min:
+        delta_norm = 1.0 - ((delta_grid - delta_min) / (delta_max - delta_min))
+    else:
+        delta_norm = np.ones_like(delta_grid)
+
     df = pd.DataFrame({
         'x': grid_points_use[:, 0],
         'y': grid_points_use[:, 1],
         'delta_z': delta_grid,
-        'abs_delta_z': abs_delta_grid
+        'abs_delta_z': abs_delta_grid,
+        'delta_norm': delta_norm
     })
     df.to_csv(os.path.join(output_dir, f'vertical_confidence_grid_{surface_name}.csv'), index=False)
 
@@ -1079,6 +1088,8 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
 
     _plot_heat(delta_grid, f'Vertical confidence (delta Z) - {surface_name}',
                f'vertical_deltaZ_{surface_name}.png')
+    _plot_heat(delta_norm, f'Vertical confidence normalized ΔZ - {surface_name}',
+               f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis')
     _plot_heat(abs_delta_grid, f'Vertical confidence |delta Z| - {surface_name}',
                f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis')
 
@@ -1101,11 +1112,11 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     try:
         import plotly.express as px
         df_plot = df.copy()
-        df_plot['abs_delta_z'] = df_plot['abs_delta_z'].fillna(0)
-        fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_z',
-                         color_continuous_scale='viridis',
-                         title=f'Vertical confidence |delta Z| - {surface_name}',
-                         labels={'abs_delta_z': '|delta Z| (m)'})
+        df_plot['delta_norm'] = df_plot['delta_norm'].fillna(0)
+        fig = px.scatter(df_plot, x='x', y='y', color='delta_norm',
+                         color_continuous_scale='viridis', range_color=[0, 1],
+                         title=f'Vertical confidence normalized ΔZ - {surface_name}',
+                         labels={'delta_norm': 'normalized ΔZ (1 = best)'})
         fig.update_layout(xaxis_title='X', yaxis_title='Y')
         fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'))
     except Exception as e:
