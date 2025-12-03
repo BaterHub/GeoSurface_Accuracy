@@ -287,7 +287,7 @@ def get_surface_name(working_dir):
 def ensure_mapping_file(working_dir, surface_name):
     """
     Ensure a surface->data mapping file (wells/sections/maps).
-    If missing, create a template with wells/sections enabled and maps disabled.
+    If missing, create a template with wells/sections enabled, maps disabled, vertical enabled.
     """
     import pandas as pd
     map_path = os.path.join(working_dir, 'surface_data_mapping.csv')
@@ -296,7 +296,8 @@ def ensure_mapping_file(working_dir, surface_name):
             'surface': surface_name,
             'use_wells': 1,
             'use_sections': 1,
-            'use_maps': 0
+            'use_maps': 0,
+            'use_vertical': 1
         }])
         df.to_csv(map_path, index=False)
         print(f"Created mapping file: {map_path}")
@@ -308,13 +309,14 @@ def ensure_mapping_file(working_dir, surface_name):
     row = df[df['surface'] == surface_name]
     if row.empty:
         print(f"No row for surface {surface_name} in mapping. Using defaults.")
-        return {'use_wells': True, 'use_sections': True, 'use_maps': False}
+        return {'use_wells': True, 'use_sections': True, 'use_maps': False, 'use_vertical': True}
     def bool_val(col):
         return bool(row.iloc[0].get(col, 1))
     return {
         'use_wells': bool_val('use_wells'),
         'use_sections': bool_val('use_sections'),
-        'use_maps': bool_val('use_maps')
+        'use_maps': bool_val('use_maps'),
+        'use_vertical': bool_val('use_vertical')
     }
 
 
@@ -918,6 +920,25 @@ def _extract_point_z(gdf, preferred_names=None):
     return points
 
 
+def _load_depth_csv(working_dir, filename, required_cols):
+    """
+    Load a depth CSV if present; returns DataFrame or None.
+    """
+    path = os.path.join(working_dir, filename)
+    if not os.path.exists(path):
+        return None
+    try:
+        df = pd.read_csv(path)
+        for col in required_cols:
+            if col not in df.columns:
+                print(f"{filename} missing column {col}, ignoring file.")
+                return None
+        return df
+    except Exception as e:
+        print(f"Could not read {filename}: {e}")
+        return None
+
+
 def _idw_from_points(values, points_xy, grid_points, power=2):
     """
     Compute IDW on given grid_points from sample points.
@@ -948,21 +969,60 @@ def _idw_from_points(values, points_xy, grid_points, power=2):
 
 
 def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid_points_use,
-                              GX, GY, mask, output_dir, surface_name, idw_power=2):
+                              GX, GY, mask, output_dir, surface_name, idw_power=2,
+                              well_depths_df=None, section_depths_df=None,
+                              well_id_field='NOME_POZZO', section_id_field='NOME'):
     """
     Compute vertical confidence from checkpoints with Z (primarily wells).
     Produces CSV, heatmaps (delta Z and |delta Z|), histogram, and HTML scatter.
     """
     os.makedirs(output_dir, exist_ok=True)
-    # Collect sample points with Z
     samples = []
-    wells_pts = _extract_point_z(wells_shp)
+
+    def _collect_from_depth_df(gdf, depth_df, id_field):
+        pts = []
+        if depth_df is None or depth_df.empty or gdf is None or gdf.empty:
+            return pts
+        gdf_ids = gdf[id_field] if id_field in gdf.columns else gdf.index.astype(str)
+        gdf_lookup = dict(zip(gdf_ids.astype(str), gdf.geometry))
+        for _, row in depth_df.iterrows():
+            cid = str(row.get('checkpoint_id', '')).strip()
+            if cid in gdf_lookup:
+                geom = gdf_lookup[cid]
+                x = getattr(geom, 'x', None)
+                y = getattr(geom, 'y', None)
+                zval = row.get('z', None)
+                if x is None or y is None or pd.isna(zval):
+                    continue
+                pts.append((float(x), float(y), float(zval)))
+        return pts
+
+    # Wells: prefer depth CSV, else geometry Z/attribute
+    wells_pts = []
+    if well_depths_df is not None:
+        wells_pts.extend(_collect_from_depth_df(wells_shp, well_depths_df[well_depths_df['surface'] == surface_name], well_id_field))
+    if not wells_pts:
+        wells_pts = _extract_point_z(wells_shp)
     if wells_pts:
         samples.extend(wells_pts)
-    # sections rarely have Z; include only if present
-    sections_pts = _extract_point_z(sections_shp)
+
+    # Sections: prefer depth CSV (with x/y if provided), else geometry Z/attribute
+    sections_pts = []
+    if section_depths_df is not None:
+        df_sec = section_depths_df[section_depths_df['surface'] == surface_name]
+        for _, row in df_sec.iterrows():
+            x = row.get('x', None)
+            y = row.get('y', None)
+            zval = row.get('z', None)
+            if pd.notna(x) and pd.notna(y) and pd.notna(zval):
+                sections_pts.append((float(x), float(y), float(zval)))
+        if not sections_pts:
+            sections_pts.extend(_collect_from_depth_df(sections_shp, df_sec, section_id_field))
+    if not sections_pts:
+        sections_pts = _extract_point_z(sections_shp)
     if sections_pts:
         samples.extend(sections_pts)
+
     if not samples:
         print("No checkpoints with Z found; skipping vertical confidence.")
         return None
