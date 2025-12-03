@@ -473,7 +473,8 @@ def compute_horizontal_weights(grid_points, wells_points=None, sections_points=N
 
 def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
                               use_wells=True, use_sections=True,
-                              grid_spacing=5000, line_step=2000, surface_name='surface'):
+                              grid_spacing=5000, line_step=2000, surface_name='surface',
+                              xlim=None, ylim=None):
     """
     Compute horizontal confidence weights (IDW) and distance distributions.
     Saves CSV/PNG/HTML in output_dir.
@@ -524,6 +525,10 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto', vmin=0, vmax=1)
             plt.colorbar(label='Confidence weight (0-1)')
             plt.title(f'Horizontal confidence (IDW) - {surface_name}')
+            if xlim:
+                plt.xlim(xlim)
+            if ylim:
+                plt.ylim(ylim)
             plt.savefig(os.path.join(output_dir, f'horizontal_confidence_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
         except Exception as e:
@@ -600,7 +605,8 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
 
 def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing=False,
                    smoothing_iterations=3, smoothing_factor=0.2, crs='EPSG:6708',
-                   output_filename='model_dataset.png', grid_points=None, show_plot=False, surface_name=None):
+                   output_filename='model_dataset.png', grid_points=None, show_plot=False, surface_name=None,
+                   xlim=None, ylim=None):
     """
     Styled visualization of the GOCAD surface footprint (only extent), wells, and sections
     with presentation-friendly styling. Optimized version using a bounding polygon for better performance.
@@ -860,10 +866,15 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     grid_label_added = False
     if grid_points is not None:
         try:
-            ax_2d.scatter(grid_points[:, 0], grid_points[:, 1], s=3, color='gray', alpha=0.3, label='Griglia valutazione')
+            ax_2d.scatter(grid_points[:, 0], grid_points[:, 1], s=3, color='gray', alpha=0.3, label='Evaluation grid')
             grid_label_added = True
         except Exception:
             grid_label_added = False
+
+    if xlim:
+        ax_2d.set_xlim(xlim)
+    if ylim:
+        ax_2d.set_ylim(ylim)
 
     plt.tight_layout()
 
@@ -1013,7 +1024,8 @@ def smooth_surface(vertices, triangles, iterations=3, factor=0.2):
 def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid_points_use,
                               GX, GY, mask, output_dir, surface_name, idw_power=2,
                               well_depths_df=None, section_depths_df=None,
-                              well_id_field='NOME_POZZO', section_id_field='NOME'):
+                              well_id_field='NOME_POZZO', section_id_field='NOME',
+                              xlim=None, ylim=None):
     """
     Compute vertical confidence from checkpoints with Z (primarily wells).
     Produces CSV, heatmaps (|dZ| and normalized |dZ|), and HTML scatter.
@@ -1123,6 +1135,10 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             plt.title(title)
             plt.xlabel('X')
             plt.ylabel('Y')
+            if xlim:
+                plt.xlim(xlim)
+            if ylim:
+                plt.ylim(ylim)
             plt.savefig(os.path.join(output_dir, fname), dpi=300, bbox_inches='tight')
             plt.close(fig)
         except Exception as e:
