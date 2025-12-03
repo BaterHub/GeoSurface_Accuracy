@@ -753,7 +753,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
                                              bbox=dict(boxstyle="round,pad=0.3", fc='crimson', ec="none", alpha=0.7))
                         txt.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='darkred')])
         except Exception as e:
-            print(f"Errore durante la visualizzazione avanzata delle Sections: {e}")
+            print(f"Error during advanced section visualization: {e}")
             sections_shp.plot(ax=ax_2d, color='red', linewidth=2, label='Sections')
 
     stats_info = []
@@ -780,7 +780,7 @@ def visualize_data(vertices, triangles, wells_shp, sections_shp, apply_smoothing
     ax_2d.set_xlabel('X (m)', fontsize=12, fontweight='bold')
     ax_2d.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
     lower_name = str(surface_name).lower() if surface_name else ''
-    is_model = lower_name.startswith('modello') or lower_name.startswith('model')
+    is_model = lower_name.startswith('model')
     if is_model:
         title_txt = "Model and data footprint"
         stats_title = "MODEL STATS"
@@ -968,13 +968,55 @@ def _idw_from_points(values, points_xy, grid_points, power=2):
     return res
 
 
+
+
+def smooth_surface(vertices, triangles, iterations=3, factor=0.2):
+    """
+    Apply Laplacian smoothing to the surface
+    """
+    import numpy as np
+
+    smoothed_vertices = vertices.copy()
+    neighbors = [[] for _ in range(len(vertices))]
+
+    for tri in triangles:
+        for i in range(3):
+            v1 = tri[i]
+            v2 = tri[(i + 1) % 3]
+            v3 = tri[(i + 2) % 3]
+
+            if v2 not in neighbors[v1]:
+                neighbors[v1].append(v2)
+            if v3 not in neighbors[v1]:
+                neighbors[v1].append(v3)
+
+    for _ in range(iterations):
+        new_vertices = smoothed_vertices.copy()
+
+        for i in range(len(smoothed_vertices)):
+            if not neighbors[i]:
+                continue
+
+            neighbor_sum = np.zeros(3)
+            for n in neighbors[i]:
+                neighbor_sum += smoothed_vertices[n]
+
+            neighbor_avg = neighbor_sum / len(neighbors[i])
+            new_vertices[i] = smoothed_vertices[i] + factor * (neighbor_avg - smoothed_vertices[i])
+
+        smoothed_vertices = new_vertices
+
+    return smoothed_vertices
+
+
+
 def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid_points_use,
                               GX, GY, mask, output_dir, surface_name, idw_power=2,
                               well_depths_df=None, section_depths_df=None,
                               well_id_field='NOME_POZZO', section_id_field='NOME'):
     """
     Compute vertical confidence from checkpoints with Z (primarily wells).
-    Produces CSV, heatmaps (delta Z and |delta Z|), histogram, and HTML scatter.
+    Produces CSV, heatmaps (|?Z| and normalized |?Z|), histogram, and HTML scatter.
     """
     os.makedirs(output_dir, exist_ok=True)
     samples = []
@@ -1047,26 +1089,23 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     delta_z = pts_z - z_model
     abs_delta = np.abs(delta_z)
 
-    # IDW over grid
-    delta_grid = _idw_from_points(delta_z, pts_xy, grid_points_use, power=idw_power)
+    # IDW over grid using absolute residuals
     abs_delta_grid = _idw_from_points(abs_delta, pts_xy, grid_points_use, power=idw_power)
-    if delta_grid is None or abs_delta_grid is None:
+    if abs_delta_grid is None:
         return None
 
-    # Normalize delta grid: 1 - (delta - min)/(max - min)
-    delta_min = np.nanmin(delta_grid)
-    delta_max = np.nanmax(delta_grid)
-    if np.isfinite(delta_min) and np.isfinite(delta_max) and delta_max != delta_min:
-        delta_norm = 1.0 - ((delta_grid - delta_min) / (delta_max - delta_min))
+    abs_min = np.nanmin(abs_delta_grid)
+    abs_max = np.nanmax(abs_delta_grid)
+    if np.isfinite(abs_min) and np.isfinite(abs_max) and abs_max != abs_min:
+        abs_delta_norm = 1.0 - ((abs_delta_grid - abs_min) / (abs_max - abs_min))
     else:
-        delta_norm = np.ones_like(delta_grid)
+        abs_delta_norm = np.ones_like(abs_delta_grid)
 
     df = pd.DataFrame({
         'x': grid_points_use[:, 0],
         'y': grid_points_use[:, 1],
-        'delta_z': delta_grid,
         'abs_delta_z': abs_delta_grid,
-        'delta_norm': delta_norm
+        'abs_delta_norm': abs_delta_norm
     })
     df.to_csv(os.path.join(output_dir, f'vertical_confidence_grid_{surface_name}.csv'), index=False)
 
@@ -1077,7 +1116,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             grid_vals[mask.reshape(GX.shape)] = data
             fig = plt.figure(figsize=(10, 8))
             plt.pcolormesh(GX, GY, grid_vals, cmap=cmap, shading='auto')
-            plt.colorbar(label='Delta Z (m)')
+            plt.colorbar(label='Value')
             plt.title(title)
             plt.xlabel('X')
             plt.ylabel('Y')
@@ -1086,23 +1125,20 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
         except Exception as e:
             warnings.warn(f"Could not save vertical heatmap {fname}: {e}")
 
-    _plot_heat(delta_grid, f'Vertical confidence (delta Z) - {surface_name}',
-               f'vertical_deltaZ_{surface_name}.png')
-    _plot_heat(delta_norm, f'Vertical confidence normalized ΔZ - {surface_name}',
-               f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis')
-    _plot_heat(abs_delta_grid, f'Vertical confidence |delta Z| - {surface_name}',
+    _plot_heat(abs_delta_grid, f'Vertical confidence |?Z| - {surface_name}',
                f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis')
+    _plot_heat(abs_delta_norm, f'Vertical confidence normalized |?Z| - {surface_name}',
+               f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis')
 
     # Histogram
     try:
         fig_h = plt.figure(figsize=(8, 6))
-        bins = np.linspace(np.nanmin(delta_z), np.nanmax(delta_z), 40) if len(delta_z) > 1 else 10
-        plt.hist(delta_z, bins=bins, alpha=0.6, label='Delta Z', histtype='step', linewidth=2)
-        plt.hist(abs_delta, bins=30, alpha=0.6, label='|Delta Z|', histtype='step', linewidth=2)
-        plt.xlabel('Delta Z (m)')
+        bins = np.linspace(np.nanmin(abs_delta), np.nanmax(abs_delta), 40) if len(abs_delta) > 1 else 10
+        plt.hist(abs_delta, bins=bins, alpha=0.6, label='|Delta Z|', histtype='step', linewidth=2)
+        plt.xlabel('|Delta Z| (m)')
         plt.ylabel('Occurrences')
         plt.legend()
-        plt.title(f'Vertical confidence residuals - {surface_name}')
+        plt.title(f'Vertical confidence residuals (abs) - {surface_name}')
         plt.savefig(os.path.join(output_dir, f'vertical_deltaZ_hist_{surface_name}.png'), dpi=300, bbox_inches='tight')
         plt.close(fig_h)
     except Exception as e:
@@ -1112,58 +1148,18 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     try:
         import plotly.express as px
         df_plot = df.copy()
-        df_plot['delta_norm'] = df_plot['delta_norm'].fillna(0)
-        fig = px.scatter(df_plot, x='x', y='y', color='delta_norm',
+        df_plot['abs_delta_norm'] = df_plot['abs_delta_norm'].fillna(0)
+        fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
                          color_continuous_scale='viridis', range_color=[0, 1],
-                         title=f'Vertical confidence normalized ΔZ - {surface_name}',
-                         labels={'delta_norm': 'normalized ΔZ (1 = best)'})
+                         title=f'Vertical confidence normalized |?Z| - {surface_name}',
+                         labels={'abs_delta_norm': 'normalized |?Z| (1 = best)'})
         fig.update_layout(xaxis_title='X', yaxis_title='Y')
         fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'))
     except Exception as e:
         warnings.warn(f"Could not save vertical interactive map: {e}")
 
     return {
-        'delta_grid': delta_grid,
         'abs_delta_grid': abs_delta_grid,
+        'abs_delta_norm': abs_delta_norm,
         'samples': len(delta_z)
     }
-
-
-def smooth_surface(vertices, triangles, iterations=3, factor=0.2):
-    """
-    Apply Laplacian smoothing to the surface
-    """
-    import numpy as np
-
-    smoothed_vertices = vertices.copy()
-    neighbors = [[] for _ in range(len(vertices))]
-
-    for tri in triangles:
-        for i in range(3):
-            v1 = tri[i]
-            v2 = tri[(i + 1) % 3]
-            v3 = tri[(i + 2) % 3]
-
-            if v2 not in neighbors[v1]:
-                neighbors[v1].append(v2)
-            if v3 not in neighbors[v1]:
-                neighbors[v1].append(v3)
-
-    for _ in range(iterations):
-        new_vertices = smoothed_vertices.copy()
-
-        for i in range(len(smoothed_vertices)):
-            if not neighbors[i]:
-                continue
-
-            neighbor_sum = np.zeros(3)
-            for n in neighbors[i]:
-                neighbor_sum += smoothed_vertices[n]
-
-            neighbor_avg = neighbor_sum / len(neighbors[i])
-            new_vertices[i] = smoothed_vertices[i] + factor * (neighbor_avg - smoothed_vertices[i])
-
-        smoothed_vertices = new_vertices
-
-    return smoothed_vertices
-
