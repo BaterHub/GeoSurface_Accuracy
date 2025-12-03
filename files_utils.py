@@ -521,8 +521,8 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             mask2d = mask.reshape(GX.shape)
             grid_weights[mask2d] = combined
             fig_w = plt.figure(figsize=(10, 8))
-            plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto')
-            plt.colorbar(label='Confidence weight')
+            plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto', vmin=0, vmax=1)
+            plt.colorbar(label='Confidence weight (0-1)')
             plt.title(f'Horizontal confidence (IDW) - {surface_name}')
             plt.savefig(os.path.join(output_dir, f'horizontal_confidence_idw_{surface_name}.png'), dpi=300, bbox_inches='tight')
             plt.close(fig_w)
