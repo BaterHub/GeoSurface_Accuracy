@@ -474,7 +474,7 @@ def compute_horizontal_weights(grid_points, wells_points=None, sections_points=N
 def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
                               use_wells=True, use_sections=True,
                               grid_spacing=5000, line_step=2000, surface_name='surface',
-                              xlim=None, ylim=None):
+                              xlim=None, ylim=None, crs_proj=None):
     """
     Compute horizontal confidence weights (IDW) and distance distributions.
     Saves CSV/PNG/HTML in output_dir.
@@ -498,6 +498,14 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     )
 
     df = pd.DataFrame({'x': grid_points_use[:, 0], 'y': grid_points_use[:, 1]})
+    # initialize columns with NaN to keep structure even if empty
+    df['dist_wells'] = np.nan
+    df['dist_wells_km'] = np.nan
+    df['weight_wells'] = np.nan
+    df['dist_sections'] = np.nan
+    df['dist_sections_km'] = np.nan
+    df['weight_sections'] = np.nan
+    df['weight_combined'] = np.nan
     if wells_points is not None:
         d_w, _ = nearest_distance(grid_points_use, wells_points)
         df['dist_wells'] = d_w
@@ -512,6 +520,16 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             df['weight_sections'] = sections_w
     if combined is not None:
         df['weight_combined'] = combined
+    # lon/lat if CRS provided
+    if crs_proj:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+            lon, lat = transformer.transform(df['x'].values, df['y'].values)
+            df['lon'] = lon
+            df['lat'] = lat
+        except Exception as e:
+            warnings.warn(f"Could not compute lon/lat: {e}")
 
     df.to_csv(os.path.join(output_dir, f'horizontal_confidence_grid_{surface_name}.csv'), index=False)
 
