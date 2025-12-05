@@ -1144,11 +1144,6 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
         except Exception as e:
             warnings.warn(f"Could not save vertical heatmap {fname}: {e}")
 
-    _plot_heat(abs_delta_grid, f'Vertical confidence |dZ| (m) - {surface_name}',
-               f'vertical_abs_deltaZ_{surface_name}.png', cmap='viridis',
-               vmin=abs_min if np.isfinite(abs_min) else None,
-               vmax=abs_max if np.isfinite(abs_max) else None,
-               cbar_label='|dZ| (m)')
     _plot_heat(abs_delta_norm, f'Vertical confidence normalized |dZ| - {surface_name}',
                f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis',
                vmin=0, vmax=1, cbar_label='normalized |dZ| (1=best)')
