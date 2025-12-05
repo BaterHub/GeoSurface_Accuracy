@@ -608,10 +608,20 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         if combined is not None:
             df_plot = df.copy()
             df_plot['weight_plot'] = df_plot['weight_combined'].fillna(0)
-            fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
-                              color_continuous_scale='viridis', range_color=[0, 1],
-                              title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
-            fig.update_layout(xaxis_title='X', yaxis_title='Y')
+            use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+            if use_geo:
+                fig = px.scatter_mapbox(
+                    df_plot, lat='lat', lon='lon', color='weight_plot',
+                    color_continuous_scale='viridis', range_color=[0, 1],
+                    title=f'Horizontal confidence IDW {surface_name}',
+                    zoom=6, height=750
+                )
+                fig.update_layout(mapbox_style="open-street-map")
+            else:
+                fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
+                                 color_continuous_scale='viridis', range_color=[0, 1],
+                                 title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
+                fig.update_layout(xaxis_title='X', yaxis_title='Y')
             fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'))
     except Exception as e:
         warnings.warn(f"Could not save interactive map: {e}")
@@ -1191,11 +1201,22 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
         import plotly.express as px
         df_plot = df.copy()
         df_plot['abs_delta_norm'] = df_plot['abs_delta_norm'].fillna(0)
-        fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
-                         color_continuous_scale='viridis', range_color=[0, 1],
-                         title=f'Vertical confidence normalized |dZ| - {surface_name}',
-                         labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
-        fig.update_layout(xaxis_title='X', yaxis_title='Y')
+        use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+        if use_geo:
+            fig = px.scatter_mapbox(
+                df_plot, lat='lat', lon='lon', color='abs_delta_norm',
+                color_continuous_scale='viridis', range_color=[0, 1],
+                title=f'Vertical confidence normalized |dZ| - {surface_name}',
+                labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'},
+                zoom=6, height=750
+            )
+            fig.update_layout(mapbox_style="open-street-map")
+        else:
+            fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
+                             color_continuous_scale='viridis', range_color=[0, 1],
+                             title=f'Vertical confidence normalized |dZ| - {surface_name}',
+                             labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
+            fig.update_layout(xaxis_title='X', yaxis_title='Y')
         fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'))
     except Exception as e:
         warnings.warn(f"Could not save vertical interactive map: {e}")
