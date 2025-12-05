@@ -505,6 +505,9 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     df['dist_sections'] = np.nan
     df['dist_sections_km'] = np.nan
     df['weight_sections'] = np.nan
+    df['dist_maps'] = np.nan
+    df['dist_maps_km'] = np.nan
+    df['weight_maps'] = np.nan
     df['weight_combined'] = np.nan
     if wells_points is not None:
         d_w, _ = nearest_distance(grid_points_use, wells_points)
