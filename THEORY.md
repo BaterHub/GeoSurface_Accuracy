@@ -18,8 +18,8 @@ Estimate per-surface confidence maps for a GOCAD `.ts` model:
 4. **Vertical confidence (|dZ|)**: When checkpoints have Z, interpolate surface Z at checkpoint XY (triangulation), compute residuals `delta_z = z_cp - z_surface`, use `|delta_z|`, then IDW over the grid. Also compute a normalized map: `1 - (|dZ| - min)/(max - min)` (1 = best).
 
 ## Outputs (per surface)
-- Horizontal confidence: CSV (distances, weights, combined), heatmap PNG (0–1), ranking plot PNG, distance histogram, interactive HTML, footprint PNG.
-- Vertical confidence (if Z available): CSV (`abs_delta_z`, `abs_delta_norm`), heatmaps (`|dZ|`, normalized |dZ|), interactive HTML; footprint PNG shared.
+- Horizontal confidence: CSV (lon, lat, x, y, distances, weights, combined), heatmap PNG (0–1), ranking plot PNG, distance histogram, interactive HTML (basemap, isolines every 0.1, legend toggle), footprint PNG.
+- Vertical confidence (if Z available): CSV (`lon,lat,x,y,abs_delta_z,abs_delta_norm`), heatmaps (`|dZ|`, normalized |dZ|), interactive HTML with the same basemap/isolines/legend; footprint PNG shared.
 
 ## Whole model
 - Combined footprint PNG `model_dataset.png` showing overall extent and controls.

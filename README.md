@@ -13,7 +13,7 @@ Notebook and utilities to estimate horizontal confidence of geological surfaces 
 - Read multi-surface .ts files and build a grid (configurable step, clipped on hull).
 - IDW computation by constraint order (wells=1, sections=2, maps=3) and final averaging.
 - Constraint mapping per surface via edge list (`surface_checkpoint_edges.csv`) and flags (`surface_data_mapping.csv`).
-- Per-surface outputs: grid CSV, heatmap PNG, interactive HTML, distance histogram, `model_dataset_<surface>.png`.
+- Per-surface outputs: grid CSV, heatmap PNG, interactive HTML (with basemap, isolines, toggleable legend), distance histogram, `model_dataset_<surface>.png`.
 - Project-level output: `model_dataset.png` with model footprint and data.
 
 ## Requirements
@@ -59,6 +59,6 @@ Populate `working_files_folder` with the .ts file, shapefiles, and mapping CSVs,
 - Optional depth CSVs let you provide Z per surface and checkpoint (`surface_checkpoint_depths_wells.csv`, `surface_checkpoint_depths_sections.csv`); if present, they are used to build vertical confidence maps.
 
 ## Outputs
-- Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv`, `horizontal_confidence_idw_<surface>.png` (0–1 scale), `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html`, `distance_histogram_<surface>.png`.
-- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv` (includes `abs_delta_z` and `abs_delta_norm`), `vertical_deltaZ_norm_<surface>.png`, `vertical_deltaZ_<surface>.html`.
+- Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv` (lon/lat then x/y plus distances/weights), `horizontal_confidence_idw_<surface>.png` (0–1 scale, `viridis_r`), `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html` (OSM or satellite if `MAPBOX_TOKEN` is set, isolines every 0.1, legend toggle), `distance_histogram_<surface>.png`.
+- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv` (lon/lat then x/y plus `abs_delta_z` and `abs_delta_norm`), `vertical_deltaZ_norm_<surface>.png` (`plasma`), `vertical_deltaZ_<surface>.html` (same basemap/isolines/legend logic).
 - Whole model: `model_dataset.png` (global extent includes surfaces + wells + sections).
