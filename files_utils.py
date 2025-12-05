@@ -497,23 +497,19 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         grid_points_use, wells_points, sections_points
     )
 
-    # initialize coordinates (lon/lat prefilled with NaN to always keep the columns)
-    lon_vals = np.full(len(grid_points_use), np.nan)
-    lat_vals = np.full(len(grid_points_use), np.nan)
+    df = pd.DataFrame({
+        'x': grid_points_use[:, 0],
+        'y': grid_points_use[:, 1]
+    })
     if crs_proj:
         try:
             from pyproj import Transformer
             transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
             lon_vals, lat_vals = transformer.transform(grid_points_use[:, 0], grid_points_use[:, 1])
+            df['lon'] = lon_vals
+            df['lat'] = lat_vals
         except Exception as e:
             warnings.warn(f"Could not compute lon/lat: {e}")
-
-    df = pd.DataFrame({
-        'lon': lon_vals,
-        'lat': lat_vals,
-        'x': grid_points_use[:, 0],
-        'y': grid_points_use[:, 1]
-    })
     # initialize columns with NaN to keep structure even if empty
     df['dist_wells'] = np.nan
     df['dist_wells_km'] = np.nan
@@ -603,71 +599,73 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         warnings.warn(f"Could not save distance histogram: {e}")
 
     # Interattivo IDW
-    try:
-        import plotly.express as px
-        import plotly.graph_objects as go
-        if combined is not None:
-            df_plot = df.copy()
-            df_plot['weight_plot'] = df_plot['weight_combined'].fillna(0)
-            use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+    if crs_proj:
+        try:
+            import plotly.express as px
+            import plotly.graph_objects as go
+            if combined is not None:
+                df_plot = df.copy()
+                df_plot['weight_plot'] = df_plot['weight_combined'].fillna(0)
+                use_geo = ('lon' in df_plot.columns and 'lat' in df_plot.columns and
+                           df_plot['lon'].notna().any() and df_plot['lat'].notna().any())
 
-            def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
-                try:
-                    levels = np.arange(0, 1.01, 0.1)
-                    contour_grid = np.full(GX.shape, np.nan, dtype=float)
-                    contour_grid[mask.reshape(GX.shape)] = grid_vals
-                    cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
-                    for coll, lvl in zip(cs.collections, levels):
-                        for path in coll.get_paths():
-                            verts = path.vertices
-                            xs, ys = verts[:, 0], verts[:, 1]
-                            if to_lonlat and crs_proj:
-                                try:
-                                    from pyproj import Transformer
-                                    transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
-                                    xs, ys = transformer.transform(xs, ys)
-                                except Exception:
-                                    pass
-                            trace_cls = go.Scattermapbox if use_geo else go.Scatter
-                            fig_obj.add_trace(trace_cls(
-                                lon=xs if use_geo else None,
-                                lat=ys if use_geo else None,
-                                x=None if use_geo else xs,
-                                y=None if use_geo else ys,
-                                mode='lines',
-                                line=dict(color='gray', width=1),
-                                name=f'iso {lvl:.1f}',
-                                hoverinfo='skip',
-                                showlegend=True,
-                                legendgroup='isolines'
-                            ))
-                    plt.close()
-                except Exception:
-                    plt.close()
+                def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
+                    try:
+                        levels = np.arange(0, 1.01, 0.1)
+                        contour_grid = np.full(GX.shape, np.nan, dtype=float)
+                        contour_grid[mask.reshape(GX.shape)] = grid_vals
+                        cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
+                        for coll, lvl in zip(cs.collections, levels):
+                            for path in coll.get_paths():
+                                verts = path.vertices
+                                xs, ys = verts[:, 0], verts[:, 1]
+                                if to_lonlat and crs_proj:
+                                    try:
+                                        from pyproj import Transformer
+                                        transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+                                        xs, ys = transformer.transform(xs, ys)
+                                    except Exception:
+                                        pass
+                                trace_cls = go.Scattermapbox if use_geo else go.Scatter
+                                fig_obj.add_trace(trace_cls(
+                                    lon=xs if use_geo else None,
+                                    lat=ys if use_geo else None,
+                                    x=None if use_geo else xs,
+                                    y=None if use_geo else ys,
+                                    mode='lines',
+                                    line=dict(color='gray', width=1),
+                                    name=f'iso {lvl:.1f}',
+                                    hoverinfo='skip',
+                                    showlegend=True,
+                                    legendgroup='isolines'
+                                ))
+                        plt.close()
+                    except Exception:
+                        plt.close()
 
-            if use_geo:
-                mapbox_token = os.getenv("MAPBOX_TOKEN", None)
-                fig = px.scatter_mapbox(
-                    df_plot, lat='lat', lon='lon', color='weight_plot',
-                    color_continuous_scale='viridis_r', range_color=[0, 1],
-                    title=f'Horizontal confidence IDW {surface_name}',
-                    zoom=6, height=750
-                )
-                add_iso_lines(fig, combined, to_lonlat=True)
-                fig.update_layout(
-                    mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
-                    mapbox_accesstoken=mapbox_token
-                )
-            else:
-                fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
-                                 color_continuous_scale='viridis_r', range_color=[0, 1],
-                                 title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
-                fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
-                add_iso_lines(fig, combined, to_lonlat=False)
-            fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'),
-                           config={"scrollZoom": True})
-    except Exception as e:
-        warnings.warn(f"Could not save interactive map: {e}")
+                if use_geo:
+                    mapbox_token = os.getenv("MAPBOX_TOKEN", None)
+                    fig = px.scatter_mapbox(
+                        df_plot, lat='lat', lon='lon', color='weight_plot',
+                        color_continuous_scale='viridis_r', range_color=[0, 1],
+                        title=f'Horizontal confidence IDW {surface_name}',
+                        zoom=6, height=750
+                    )
+                    add_iso_lines(fig, combined, to_lonlat=True)
+                    fig.update_layout(
+                        mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
+                        mapbox_accesstoken=mapbox_token
+                    )
+                else:
+                    fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
+                                     color_continuous_scale='viridis_r', range_color=[0, 1],
+                                     title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
+                    fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
+                    add_iso_lines(fig, combined, to_lonlat=False)
+                fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'),
+                               config={"scrollZoom": True})
+        except Exception as e:
+            warnings.warn(f"Could not save interactive map: {e}")
 
     return {
         'grid_points': grid_points_use,
@@ -1195,24 +1193,21 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     else:
         abs_delta_norm = np.ones_like(abs_delta_grid)
 
-    lon_vals = np.full(len(grid_points_use), np.nan)
-    lat_vals = np.full(len(grid_points_use), np.nan)
-    if crs_proj:
-        try:
-            from pyproj import Transformer
-            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
-            lon_vals, lat_vals = transformer.transform(grid_points_use[:, 0], grid_points_use[:, 1])
-        except Exception as e:
-            warnings.warn(f"Could not compute lon/lat for vertical grid: {e}")
-
     df = pd.DataFrame({
-        'lon': lon_vals,
-        'lat': lat_vals,
         'x': grid_points_use[:, 0],
         'y': grid_points_use[:, 1],
         'abs_delta_z': abs_delta_grid,
         'abs_delta_norm': abs_delta_norm
     })
+    if crs_proj:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+            lon_vals, lat_vals = transformer.transform(grid_points_use[:, 0], grid_points_use[:, 1])
+            df['lon'] = lon_vals
+            df['lat'] = lat_vals
+        except Exception as e:
+            warnings.warn(f"Could not compute lon/lat for vertical grid: {e}")
     df.to_csv(os.path.join(output_dir, f'vertical_confidence_grid_{surface_name}.csv'), index=False)
 
     # Heatmaps
@@ -1240,72 +1235,74 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
                vmin=0, vmax=1, cbar_label='normalized |dZ| (1=best)')
 
     # Interactive scatter
-    try:
-        import plotly.express as px
-        import plotly.graph_objects as go
-        df_plot = df.copy()
-        df_plot['abs_delta_norm'] = df_plot['abs_delta_norm'].fillna(0)
-        use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+    if crs_proj:
+        try:
+            import plotly.express as px
+            import plotly.graph_objects as go
+            df_plot = df.copy()
+            df_plot['abs_delta_norm'] = df_plot['abs_delta_norm'].fillna(0)
+            use_geo = ('lon' in df_plot.columns and 'lat' in df_plot.columns and
+                       df_plot['lon'].notna().any() and df_plot['lat'].notna().any())
 
-        def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
-            try:
-                levels = np.arange(0, 1.01, 0.1)
-                contour_grid = np.full(GX.shape, np.nan, dtype=float)
-                contour_grid[mask.reshape(GX.shape)] = grid_vals
-                cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
-                for coll, lvl in zip(cs.collections, levels):
-                    for path in coll.get_paths():
-                        verts = path.vertices
-                        xs, ys = verts[:, 0], verts[:, 1]
-                        if to_lonlat and crs_proj:
-                            try:
-                                from pyproj import Transformer
-                                transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
-                                xs, ys = transformer.transform(xs, ys)
-                            except Exception:
-                                pass
-                        trace_cls = go.Scattermapbox if use_geo else go.Scatter
-                        fig_obj.add_trace(trace_cls(
-                            lon=xs if use_geo else None,
-                            lat=ys if use_geo else None,
-                            x=None if use_geo else xs,
-                            y=None if use_geo else ys,
-                            mode='lines',
-                            line=dict(color='gray', width=1),
-                            name=f'iso {lvl:.1f}',
-                            hoverinfo='skip',
-                            showlegend=True,
-                            legendgroup='isolines'
-                        ))
-                plt.close()
-            except Exception:
-                plt.close()
+            def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
+                try:
+                    levels = np.arange(0, 1.01, 0.1)
+                    contour_grid = np.full(GX.shape, np.nan, dtype=float)
+                    contour_grid[mask.reshape(GX.shape)] = grid_vals
+                    cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
+                    for coll, lvl in zip(cs.collections, levels):
+                        for path in coll.get_paths():
+                            verts = path.vertices
+                            xs, ys = verts[:, 0], verts[:, 1]
+                            if to_lonlat and crs_proj:
+                                try:
+                                    from pyproj import Transformer
+                                    transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+                                    xs, ys = transformer.transform(xs, ys)
+                                except Exception:
+                                    pass
+                            trace_cls = go.Scattermapbox if use_geo else go.Scatter
+                            fig_obj.add_trace(trace_cls(
+                                lon=xs if use_geo else None,
+                                lat=ys if use_geo else None,
+                                x=None if use_geo else xs,
+                                y=None if use_geo else ys,
+                                mode='lines',
+                                line=dict(color='gray', width=1),
+                                name=f'iso {lvl:.1f}',
+                                hoverinfo='skip',
+                                showlegend=True,
+                                legendgroup='isolines'
+                            ))
+                    plt.close()
+                except Exception:
+                    plt.close()
 
-        if use_geo:
-            mapbox_token = os.getenv("MAPBOX_TOKEN", None)
-            fig = px.scatter_mapbox(
-                df_plot, lat='lat', lon='lon', color='abs_delta_norm',
-                color_continuous_scale='plasma', range_color=[0, 1],
-                title=f'Vertical confidence normalized |dZ| - {surface_name}',
-                labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'},
-                zoom=6, height=750
-            )
-            add_iso_lines(fig, abs_delta_norm, to_lonlat=True)
-            fig.update_layout(
-                mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
-                mapbox_accesstoken=mapbox_token
-            )
-        else:
-            fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
-                             color_continuous_scale='plasma', range_color=[0, 1],
-                             title=f'Vertical confidence normalized |dZ| - {surface_name}',
-                             labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
-            fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
-            add_iso_lines(fig, abs_delta_norm, to_lonlat=False)
-        fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'),
-                       config={"scrollZoom": True})
-    except Exception as e:
-        warnings.warn(f"Could not save vertical interactive map: {e}")
+            if use_geo:
+                mapbox_token = os.getenv("MAPBOX_TOKEN", None)
+                fig = px.scatter_mapbox(
+                    df_plot, lat='lat', lon='lon', color='abs_delta_norm',
+                    color_continuous_scale='plasma', range_color=[0, 1],
+                    title=f'Vertical confidence normalized |dZ| - {surface_name}',
+                    labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'},
+                    zoom=6, height=750
+                )
+                add_iso_lines(fig, abs_delta_norm, to_lonlat=True)
+                fig.update_layout(
+                    mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
+                    mapbox_accesstoken=mapbox_token
+                )
+            else:
+                fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
+                                 color_continuous_scale='plasma', range_color=[0, 1],
+                                 title=f'Vertical confidence normalized |dZ| - {surface_name}',
+                                 labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
+                fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
+                add_iso_lines(fig, abs_delta_norm, to_lonlat=False)
+            fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'),
+                           config={"scrollZoom": True})
+        except Exception as e:
+            warnings.warn(f"Could not save vertical interactive map: {e}")
 
     return {
         'abs_delta_grid': abs_delta_grid,
@@ -1348,19 +1345,7 @@ def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_
     geometric_combined = np.power(weights, alpha) * np.power(vert_norm, 1 - alpha)
     min_combined = np.minimum(weights, vert_norm)
 
-    lon_vals = np.full(len(grid_points), np.nan)
-    lat_vals = np.full(len(grid_points), np.nan)
-    if crs_proj:
-        try:
-            from pyproj import Transformer
-            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
-            lon_vals, lat_vals = transformer.transform(grid_points[:, 0], grid_points[:, 1])
-        except Exception as e:
-            warnings.warn(f"Could not compute lon/lat for combined grid: {e}")
-
     df = pd.DataFrame({
-        'lon': lon_vals,
-        'lat': lat_vals,
         'x': grid_points[:, 0],
         'y': grid_points[:, 1],
         'horizontal_weight': weights,
@@ -1370,6 +1355,15 @@ def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_
         'min_combined': min_combined,
         'has_vertical': True
     })
+    if crs_proj:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+            lon_vals, lat_vals = transformer.transform(grid_points[:, 0], grid_points[:, 1])
+            df['lon'] = lon_vals
+            df['lat'] = lat_vals
+        except Exception as e:
+            warnings.warn(f"Could not compute lon/lat for combined grid: {e}")
     os.makedirs(output_dir, exist_ok=True)
     df.to_csv(os.path.join(output_dir, f'combined_confidence_grid_{surface_name}.csv'), index=False)
 
@@ -1410,73 +1404,75 @@ def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_
     except Exception as e:
         warnings.warn(f"Could not save combined heatmap: {e}")
 
-    # Interactive HTML for selected mode
-    try:
-        import plotly.express as px
-        import plotly.graph_objects as go
-        df_plot = df.copy()
-        df_plot['combined_plot'] = combined_vals
-        use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+    # Interactive HTML for selected mode (only if CRS provided for lon/lat)
+    if crs_proj:
+        try:
+            import plotly.express as px
+            import plotly.graph_objects as go
+            df_plot = df.copy()
+            df_plot['combined_plot'] = combined_vals
+            use_geo = ('lon' in df_plot.columns and 'lat' in df_plot.columns and
+                       df_plot['lon'].notna().any() and df_plot['lat'].notna().any())
 
-        def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
-            try:
-                levels = np.arange(0, 1.01, 0.1)
-                contour_grid = np.full(GX.shape, np.nan, dtype=float)
-                contour_grid[mask.reshape(GX.shape)] = grid_vals
-                cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
-                for coll, lvl in zip(cs.collections, levels):
-                    for path in coll.get_paths():
-                        verts = path.vertices
-                        xs, ys = verts[:, 0], verts[:, 1]
-                        if to_lonlat and crs_proj:
-                            try:
-                                from pyproj import Transformer
-                                transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
-                                xs, ys = transformer.transform(xs, ys)
-                            except Exception:
-                                pass
-                        trace_cls = go.Scattermapbox if use_geo else go.Scatter
-                        fig_obj.add_trace(trace_cls(
-                            lon=xs if use_geo else None,
-                            lat=ys if use_geo else None,
-                            x=None if use_geo else xs,
-                            y=None if use_geo else ys,
-                            mode='lines',
-                            line=dict(color='gray', width=1),
-                            name=f'iso {lvl:.1f}',
-                            hoverinfo='skip',
-                            showlegend=True,
-                            legendgroup='isolines'
-                        ))
-                plt.close()
-            except Exception:
-                plt.close()
+            def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
+                try:
+                    levels = np.arange(0, 1.01, 0.1)
+                    contour_grid = np.full(GX.shape, np.nan, dtype=float)
+                    contour_grid[mask.reshape(GX.shape)] = grid_vals
+                    cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
+                    for coll, lvl in zip(cs.collections, levels):
+                        for path in coll.get_paths():
+                            verts = path.vertices
+                            xs, ys = verts[:, 0], verts[:, 1]
+                            if to_lonlat and crs_proj:
+                                try:
+                                    from pyproj import Transformer
+                                    transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+                                    xs, ys = transformer.transform(xs, ys)
+                                except Exception:
+                                    pass
+                            trace_cls = go.Scattermapbox if use_geo else go.Scatter
+                            fig_obj.add_trace(trace_cls(
+                                lon=xs if use_geo else None,
+                                lat=ys if use_geo else None,
+                                x=None if use_geo else xs,
+                                y=None if use_geo else ys,
+                                mode='lines',
+                                line=dict(color='gray', width=1),
+                                name=f'iso {lvl:.1f}',
+                                hoverinfo='skip',
+                                showlegend=True,
+                                legendgroup='isolines'
+                            ))
+                    plt.close()
+                except Exception:
+                    plt.close()
 
-        if use_geo:
-            mapbox_token = os.getenv("MAPBOX_TOKEN", None)
-            fig = px.scatter_mapbox(
-                df_plot, lat='lat', lon='lon', color='combined_plot',
-                color_continuous_scale=cmap, range_color=[0, 1],
-                title=f'Combined confidence ({mode}) - {surface_name}',
-                labels={'combined_plot': f'combined ({mode})'},
-                zoom=6, height=750
-            )
-            add_iso_lines(fig, combined_vals, to_lonlat=True)
-            fig.update_layout(
-                mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
-                mapbox_accesstoken=mapbox_token
-            )
-        else:
-            fig = px.scatter(df_plot, x='x', y='y', color='combined_plot',
-                             color_continuous_scale=cmap, range_color=[0, 1],
-                             title=f'Combined confidence ({mode}) - {surface_name}',
-                             labels={'combined_plot': f'combined ({mode})'})
-            fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
-            add_iso_lines(fig, combined_vals, to_lonlat=False)
-        fig.write_html(os.path.join(output_dir, f'combined_confidence_{mode}_{surface_name}.html'),
-                       config={"scrollZoom": True})
-    except Exception as e:
-        warnings.warn(f"Could not save combined interactive map: {e}")
+            if use_geo:
+                mapbox_token = os.getenv("MAPBOX_TOKEN", None)
+                fig = px.scatter_mapbox(
+                    df_plot, lat='lat', lon='lon', color='combined_plot',
+                    color_continuous_scale=cmap, range_color=[0, 1],
+                    title=f'Combined confidence ({mode}) - {surface_name}',
+                    labels={'combined_plot': f'combined ({mode})'},
+                    zoom=6, height=750
+                )
+                add_iso_lines(fig, combined_vals, to_lonlat=True)
+                fig.update_layout(
+                    mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
+                    mapbox_accesstoken=mapbox_token
+                )
+            else:
+                fig = px.scatter(df_plot, x='x', y='y', color='combined_plot',
+                                 color_continuous_scale=cmap, range_color=[0, 1],
+                                 title=f'Combined confidence ({mode}) - {surface_name}',
+                                 labels={'combined_plot': f'combined ({mode})'})
+                fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
+                add_iso_lines(fig, combined_vals, to_lonlat=False)
+            fig.write_html(os.path.join(output_dir, f'combined_confidence_{mode}_{surface_name}.html'),
+                           config={"scrollZoom": True})
+        except Exception as e:
+            warnings.warn(f"Could not save combined interactive map: {e}")
 
     return {
         'arithmetic_combined': arithmetic_combined,
