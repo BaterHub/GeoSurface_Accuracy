@@ -605,10 +605,47 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
     # Interattivo IDW
     try:
         import plotly.express as px
+        import plotly.graph_objects as go
         if combined is not None:
             df_plot = df.copy()
             df_plot['weight_plot'] = df_plot['weight_combined'].fillna(0)
             use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+
+            def add_iso_lines(fig_obj, xx, yy, grid_vals, to_lonlat=False):
+                try:
+                    levels = np.arange(0, 1.01, 0.1)
+                    contour_grid = np.full(GX.shape, np.nan, dtype=float)
+                    contour_grid[mask.reshape(GX.shape)] = grid_vals
+                    cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
+                    for coll, lvl in zip(cs.collections, levels):
+                        for path in coll.get_paths():
+                            verts = path.vertices
+                            xs, ys = verts[:, 0], verts[:, 1]
+                            if to_lonlat and crs_proj:
+                                try:
+                                    from pyproj import Transformer
+                                    transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+                                    xs, ys = transformer.transform(xs, ys)
+                                except Exception:
+                                    pass
+                            if use_geo:
+                                fig_obj.add_trace(go.Scattermapbox(
+                                    lon=xs, lat=ys, mode='lines',
+                                    line=dict(color='gray', width=1),
+                                    name=f'iso {lvl:.1f}', hoverinfo='skip',
+                                    showlegend=False
+                                ))
+                            else:
+                                fig_obj.add_trace(go.Scatter(
+                                    x=xs, y=ys, mode='lines',
+                                    line=dict(color='gray', width=1),
+                                    name=f'iso {lvl:.1f}', hoverinfo='skip',
+                                    showlegend=False
+                                ))
+                    plt.close()
+                except Exception:
+                    plt.close()
+
             if use_geo:
                 fig = px.scatter_mapbox(
                     df_plot, lat='lat', lon='lon', color='weight_plot',
@@ -616,13 +653,16 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
                     title=f'Horizontal confidence IDW {surface_name}',
                     zoom=6, height=750
                 )
+                add_iso_lines(fig, GX, GY, combined, to_lonlat=True)
                 fig.update_layout(mapbox_style="open-street-map")
             else:
                 fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
                                  color_continuous_scale='viridis_r', range_color=[0, 1],
                                  title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
-                fig.update_layout(xaxis_title='X', yaxis_title='Y')
-            fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'))
+                fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
+                add_iso_lines(fig, GX, GY, combined, to_lonlat=False)
+            fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'),
+                           config={"scrollZoom": True})
     except Exception as e:
         warnings.warn(f"Could not save interactive map: {e}")
 
@@ -1199,25 +1239,65 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     # Interactive scatter
     try:
         import plotly.express as px
+        import plotly.graph_objects as go
         df_plot = df.copy()
         df_plot['abs_delta_norm'] = df_plot['abs_delta_norm'].fillna(0)
         use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+
+        def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
+            try:
+                levels = np.arange(0, 1.01, 0.1)
+                contour_grid = np.full(GX.shape, np.nan, dtype=float)
+                contour_grid[mask.reshape(GX.shape)] = grid_vals
+                cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
+                for coll, lvl in zip(cs.collections, levels):
+                    for path in coll.get_paths():
+                        verts = path.vertices
+                        xs, ys = verts[:, 0], verts[:, 1]
+                        if to_lonlat and crs_proj:
+                            try:
+                                from pyproj import Transformer
+                                transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+                                xs, ys = transformer.transform(xs, ys)
+                            except Exception:
+                                pass
+                        if use_geo:
+                            fig_obj.add_trace(go.Scattermapbox(
+                                lon=xs, lat=ys, mode='lines',
+                                line=dict(color='gray', width=1),
+                                name=f'iso {lvl:.1f}', hoverinfo='skip',
+                                showlegend=False
+                            ))
+                        else:
+                            fig_obj.add_trace(go.Scatter(
+                                x=xs, y=ys, mode='lines',
+                                line=dict(color='gray', width=1),
+                                name=f'iso {lvl:.1f}', hoverinfo='skip',
+                                showlegend=False
+                            ))
+                plt.close()
+            except Exception:
+                plt.close()
+
         if use_geo:
             fig = px.scatter_mapbox(
                 df_plot, lat='lat', lon='lon', color='abs_delta_norm',
-                color_continuous_scale='plasma_r', range_color=[0, 1],
+                color_continuous_scale='plasma', range_color=[0, 1],
                 title=f'Vertical confidence normalized |dZ| - {surface_name}',
                 labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'},
                 zoom=6, height=750
             )
+            add_iso_lines(fig, abs_delta_norm, to_lonlat=True)
             fig.update_layout(mapbox_style="open-street-map")
         else:
             fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
-                             color_continuous_scale='plasma_r', range_color=[0, 1],
+                             color_continuous_scale='plasma', range_color=[0, 1],
                              title=f'Vertical confidence normalized |dZ| - {surface_name}',
                              labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
-            fig.update_layout(xaxis_title='X', yaxis_title='Y')
-        fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'))
+            fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
+            add_iso_lines(fig, abs_delta_norm, to_lonlat=False)
+        fig.write_html(os.path.join(output_dir, f'vertical_deltaZ_{surface_name}.html'),
+                       config={"scrollZoom": True})
     except Exception as e:
         warnings.warn(f"Could not save vertical interactive map: {e}")
 
