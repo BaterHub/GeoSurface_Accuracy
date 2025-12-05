@@ -1319,11 +1319,12 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
 
 
 def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_name,
-                                 crs_proj=None, alpha=0.7):
+                                 crs_proj=None, alpha=0.7, mode="geometric"):
     """
     Combine horizontal weight (H) and vertical normalized confidence (V) into two indicators:
       - arithmetic_combined = alpha*H + (1-alpha)*V
       - geometric_combined  = H**alpha * V**(1-alpha)
+      - min_combined        = min(H, V)
     Only computed when both H and V exist on the same grid.
     """
     if acc_outputs is None or vert_outputs is None:
@@ -1345,6 +1346,7 @@ def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_
 
     arithmetic_combined = alpha * weights + (1 - alpha) * vert_norm
     geometric_combined = np.power(weights, alpha) * np.power(vert_norm, 1 - alpha)
+    min_combined = np.minimum(weights, vert_norm)
 
     lon_vals = np.full(len(grid_points), np.nan)
     lat_vals = np.full(len(grid_points), np.nan)
@@ -1365,31 +1367,55 @@ def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_
         'vertical_norm': vert_norm,
         'arithmetic_combined': arithmetic_combined,
         'geometric_combined': geometric_combined,
+        'min_combined': min_combined,
         'has_vertical': True
     })
     os.makedirs(output_dir, exist_ok=True)
     df.to_csv(os.path.join(output_dir, f'combined_confidence_grid_{surface_name}.csv'), index=False)
 
-    # Heatmap (geometric)
+    # Choose which layer to visualize (default mode or fallback to geometric)
+    mode = (mode or "geometric").lower()
+    if mode not in {"geometric", "arithmetic", "min"}:
+        mode = "geometric"
+    mode_map = {
+        "geometric": ("geometric_combined", geometric_combined, "cividis"),
+        "arithmetic": ("arithmetic_combined", arithmetic_combined, "viridis"),
+        "min": ("min_combined", min_combined, "magma_r")
+    }
+    col_name, combined_vals, cmap = mode_map[mode]
+
+    # Heatmaps for selected mode (and keep geometric/min PNG for quick compare)
     try:
-        grid_vals = np.full(GX.shape, np.nan, dtype=float)
-        grid_vals[mask.reshape(GX.shape)] = geometric_combined
-        fig = plt.figure(figsize=(10, 8))
-        plt.pcolormesh(GX, GY, grid_vals, cmap='cividis', shading='auto', vmin=0, vmax=1)
-        plt.colorbar(label='Combined confidence (geom)')
-        plt.title(f'Combined confidence (geom) - {surface_name}')
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        plt.savefig(os.path.join(output_dir, f'combined_confidence_geom_{surface_name}.png'), dpi=300, bbox_inches='tight')
-        plt.close(fig)
+        def _save_heat(vals, fname, title, cmap_use):
+            grid_vals = np.full(GX.shape, np.nan, dtype=float)
+            grid_vals[mask.reshape(GX.shape)] = vals
+            fig = plt.figure(figsize=(10, 8))
+            plt.pcolormesh(GX, GY, grid_vals, cmap=cmap_use, shading='auto', vmin=0, vmax=1)
+            plt.colorbar(label='Combined confidence')
+            plt.title(title)
+            plt.xlabel('X')
+            plt.ylabel('Y')
+            plt.savefig(os.path.join(output_dir, fname), dpi=300, bbox_inches='tight')
+            plt.close(fig)
+
+        _save_heat(combined_vals, f'combined_confidence_{mode}_{surface_name}.png',
+                   f'Combined confidence ({mode}) - {surface_name}', cmap)
+        # Also save geometric/min for quick compare
+        if mode != "geometric":
+            _save_heat(geometric_combined, f'combined_confidence_geometric_{surface_name}.png',
+                       f'Combined confidence (geometric) - {surface_name}', 'cividis')
+        if mode != "min":
+            _save_heat(min_combined, f'combined_confidence_min_{surface_name}.png',
+                       f'Combined confidence (min) - {surface_name}', 'magma_r')
     except Exception as e:
         warnings.warn(f"Could not save combined heatmap: {e}")
 
-    # Interactive HTML
+    # Interactive HTML for selected mode
     try:
         import plotly.express as px
         import plotly.graph_objects as go
         df_plot = df.copy()
+        df_plot['combined_plot'] = combined_vals
         use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
 
         def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
@@ -1429,30 +1455,32 @@ def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_
         if use_geo:
             mapbox_token = os.getenv("MAPBOX_TOKEN", None)
             fig = px.scatter_mapbox(
-                df_plot, lat='lat', lon='lon', color='geometric_combined',
-                color_continuous_scale='cividis', range_color=[0, 1],
-                title=f'Combined confidence (geom) - {surface_name}',
-                labels={'geometric_combined': 'combined (geom)'},
+                df_plot, lat='lat', lon='lon', color='combined_plot',
+                color_continuous_scale=cmap, range_color=[0, 1],
+                title=f'Combined confidence ({mode}) - {surface_name}',
+                labels={'combined_plot': f'combined ({mode})'},
                 zoom=6, height=750
             )
-            add_iso_lines(fig, geometric_combined, to_lonlat=True)
+            add_iso_lines(fig, combined_vals, to_lonlat=True)
             fig.update_layout(
                 mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
                 mapbox_accesstoken=mapbox_token
             )
         else:
-            fig = px.scatter(df_plot, x='x', y='y', color='geometric_combined',
-                             color_continuous_scale='cividis', range_color=[0, 1],
-                             title=f'Combined confidence (geom) - {surface_name}',
-                             labels={'geometric_combined': 'combined (geom)'})
+            fig = px.scatter(df_plot, x='x', y='y', color='combined_plot',
+                             color_continuous_scale=cmap, range_color=[0, 1],
+                             title=f'Combined confidence ({mode}) - {surface_name}',
+                             labels={'combined_plot': f'combined ({mode})'})
             fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
-            add_iso_lines(fig, geometric_combined, to_lonlat=False)
-        fig.write_html(os.path.join(output_dir, f'combined_confidence_{surface_name}.html'),
+            add_iso_lines(fig, combined_vals, to_lonlat=False)
+        fig.write_html(os.path.join(output_dir, f'combined_confidence_{mode}_{surface_name}.html'),
                        config={"scrollZoom": True})
     except Exception as e:
         warnings.warn(f"Could not save combined interactive map: {e}")
 
     return {
         'arithmetic_combined': arithmetic_combined,
-        'geometric_combined': geometric_combined
+        'geometric_combined': geometric_combined,
+        'min_combined': min_combined,
+        'selected_mode': mode
     }
