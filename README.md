@@ -7,7 +7,7 @@
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/BaterHub/GeoSurface_Accuracy/blob/main/GeoSurface_Accuracy.ipynb)
 
-Notebook and utilities to estimate horizontal confidence of geological surfaces in GOCAD (.ts) format, using wells and sections (shapefiles) with ID weights = 1/(1 + r^p) normalized (IDW) on an evaluation grid. Optional vertical confidence maps are produced when checkpoints carry Z values.
+Notebook and utilities to estimate horizontal confidence of geological surfaces in GOCAD (.ts) format, using wells and sections (shapefiles) with ID weights = 1/(1 + r^p) normalized (IDW) on an evaluation grid. Optional vertical confidence maps are produced when checkpoints carry Z values. Combined confidence layers (H+V) are available when both exist.
 
 ## Features
 - Read multi-surface .ts files and build a grid (configurable step, clipped on hull).
@@ -57,8 +57,10 @@ Populate `working_files_folder` with the .ts file, shapefiles, and mapping CSVs,
 - `surface_data_mapping.csv`: per-surface toggles for wells/sections/maps and vertical processing (1/0). `use_vertical` enables vertical confidence when checkpoints have Z values (via geometry or the depth CSVs).
 - `surface_checkpoint_edges.csv`: many-to-many surface–checkpoint edge list. Columns: `surface,checkpoint_id,type` where `type` is `well`/`section`/`map` and `checkpoint_id` matches `NOME_POZZO` or `NOME`; `ALL` includes all checkpoints of that type.
 - Optional depth CSVs let you provide Z per surface and checkpoint (`surface_checkpoint_depths_wells.csv`, `surface_checkpoint_depths_sections.csv`); if present, they are used to build vertical confidence maps.
+- CRS is optional. If you set `crs` in the notebook (e.g., `EPSG:6708`), lon/lat are added to CSVs and HTML maps are produced; if left empty, outputs stay in X/Y only and HTML maps are skipped.
 
 ## Outputs
-- Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv` (lon/lat then x/y plus distances/weights), `horizontal_confidence_idw_<surface>.png` (0–1 scale, `viridis_r`), `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html` (OSM or satellite if `MAPBOX_TOKEN` is set, isolines every 0.1, legend toggle), `distance_histogram_<surface>.png`.
-- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv` (lon/lat then x/y plus `abs_delta_z` and `abs_delta_norm`), `vertical_deltaZ_norm_<surface>.png` (`plasma`), `vertical_deltaZ_<surface>.html` (same basemap/isolines/legend logic).
+- Per surface (horizontal confidence): `model_dataset_<surface>.png`, `horizontal_confidence_grid_<surface>.csv` (X/Y plus distances/weights; lon/lat only if CRS set), `horizontal_confidence_idw_<surface>.png` (0–1 scale, `viridis_r`), `horizontal_confidence_rank_<surface>.png`, `interactive_confidence_<surface>.html` (only if CRS set; OSM or satellite if `MAPBOX_TOKEN` is set, isolines every 0.1), `distance_histogram_<surface>.png`.
+- Per surface (vertical confidence, when checkpoints have Z): `vertical_confidence_grid_<surface>.csv` (`abs_delta_z`, `abs_delta_norm`, lon/lat only if CRS set), `vertical_deltaZ_norm_<surface>.png` (`plasma`), `vertical_deltaZ_<surface>.html` (same basemap/isolines/legend logic, only if CRS set).
+- Per surface (combined confidence when H+V exist): `combined_confidence_grid_<surface>.csv` (arithmetic/geometric/min), PNG/HTML for the selected mode.
 - Whole model: `model_dataset.png` (global extent includes surfaces + wells + sections).
