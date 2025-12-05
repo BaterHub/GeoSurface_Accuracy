@@ -1310,5 +1310,149 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     return {
         'abs_delta_grid': abs_delta_grid,
         'abs_delta_norm': abs_delta_norm,
-        'samples': len(delta_z)
+        'samples': len(delta_z),
+        'grid_points': grid_points_use,
+        'GX': GX,
+        'GY': GY,
+        'mask': mask
+    }
+
+
+def generate_combined_confidence(acc_outputs, vert_outputs, output_dir, surface_name,
+                                 crs_proj=None, alpha=0.7):
+    """
+    Combine horizontal weight (H) and vertical normalized confidence (V) into two indicators:
+      - arithmetic_combined = alpha*H + (1-alpha)*V
+      - geometric_combined  = H**alpha * V**(1-alpha)
+    Only computed when both H and V exist on the same grid.
+    """
+    if acc_outputs is None or vert_outputs is None:
+        return None
+    weights = acc_outputs.get('weights')
+    vert_norm = vert_outputs.get('abs_delta_norm')
+    grid_points = acc_outputs.get('grid_points')
+    GX = acc_outputs.get('GX')
+    GY = acc_outputs.get('GY')
+    mask = acc_outputs.get('mask')
+    if weights is None or vert_norm is None or grid_points is None or mask is None or GX is None or GY is None:
+        return None
+    if len(weights) != len(vert_norm) or len(weights) != len(grid_points):
+        warnings.warn(f"Combined confidence skipped for {surface_name}: length mismatch.")
+        return None
+
+    weights = np.asarray(weights, dtype=float)
+    vert_norm = np.asarray(vert_norm, dtype=float)
+
+    arithmetic_combined = alpha * weights + (1 - alpha) * vert_norm
+    geometric_combined = np.power(weights, alpha) * np.power(vert_norm, 1 - alpha)
+
+    lon_vals = np.full(len(grid_points), np.nan)
+    lat_vals = np.full(len(grid_points), np.nan)
+    if crs_proj:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+            lon_vals, lat_vals = transformer.transform(grid_points[:, 0], grid_points[:, 1])
+        except Exception as e:
+            warnings.warn(f"Could not compute lon/lat for combined grid: {e}")
+
+    df = pd.DataFrame({
+        'lon': lon_vals,
+        'lat': lat_vals,
+        'x': grid_points[:, 0],
+        'y': grid_points[:, 1],
+        'horizontal_weight': weights,
+        'vertical_norm': vert_norm,
+        'arithmetic_combined': arithmetic_combined,
+        'geometric_combined': geometric_combined,
+        'has_vertical': True
+    })
+    os.makedirs(output_dir, exist_ok=True)
+    df.to_csv(os.path.join(output_dir, f'combined_confidence_grid_{surface_name}.csv'), index=False)
+
+    # Heatmap (geometric)
+    try:
+        grid_vals = np.full(GX.shape, np.nan, dtype=float)
+        grid_vals[mask.reshape(GX.shape)] = geometric_combined
+        fig = plt.figure(figsize=(10, 8))
+        plt.pcolormesh(GX, GY, grid_vals, cmap='cividis', shading='auto', vmin=0, vmax=1)
+        plt.colorbar(label='Combined confidence (geom)')
+        plt.title(f'Combined confidence (geom) - {surface_name}')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.savefig(os.path.join(output_dir, f'combined_confidence_geom_{surface_name}.png'), dpi=300, bbox_inches='tight')
+        plt.close(fig)
+    except Exception as e:
+        warnings.warn(f"Could not save combined heatmap: {e}")
+
+    # Interactive HTML
+    try:
+        import plotly.express as px
+        import plotly.graph_objects as go
+        df_plot = df.copy()
+        use_geo = df_plot['lon'].notna().any() and df_plot['lat'].notna().any()
+
+        def add_iso_lines(fig_obj, grid_vals, to_lonlat=False):
+            try:
+                levels = np.arange(0, 1.01, 0.1)
+                contour_grid = np.full(GX.shape, np.nan, dtype=float)
+                contour_grid[mask.reshape(GX.shape)] = grid_vals
+                cs = plt.contour(GX, GY, contour_grid, levels=levels, colors='gray', linewidths=0.8)
+                for coll, lvl in zip(cs.collections, levels):
+                    for path in coll.get_paths():
+                        verts = path.vertices
+                        xs, ys = verts[:, 0], verts[:, 1]
+                        if to_lonlat and crs_proj:
+                            try:
+                                from pyproj import Transformer
+                                transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+                                xs, ys = transformer.transform(xs, ys)
+                            except Exception:
+                                pass
+                        trace_cls = go.Scattermapbox if use_geo else go.Scatter
+                        fig_obj.add_trace(trace_cls(
+                            lon=xs if use_geo else None,
+                            lat=ys if use_geo else None,
+                            x=None if use_geo else xs,
+                            y=None if use_geo else ys,
+                            mode='lines',
+                            line=dict(color='gray', width=1),
+                            name=f'iso {lvl:.1f}',
+                            hoverinfo='skip',
+                            showlegend=True,
+                            legendgroup='isolines'
+                        ))
+                plt.close()
+            except Exception:
+                plt.close()
+
+        if use_geo:
+            mapbox_token = os.getenv("MAPBOX_TOKEN", None)
+            fig = px.scatter_mapbox(
+                df_plot, lat='lat', lon='lon', color='geometric_combined',
+                color_continuous_scale='cividis', range_color=[0, 1],
+                title=f'Combined confidence (geom) - {surface_name}',
+                labels={'geometric_combined': 'combined (geom)'},
+                zoom=6, height=750
+            )
+            add_iso_lines(fig, geometric_combined, to_lonlat=True)
+            fig.update_layout(
+                mapbox_style="satellite-streets" if mapbox_token else "open-street-map",
+                mapbox_accesstoken=mapbox_token
+            )
+        else:
+            fig = px.scatter(df_plot, x='x', y='y', color='geometric_combined',
+                             color_continuous_scale='cividis', range_color=[0, 1],
+                             title=f'Combined confidence (geom) - {surface_name}',
+                             labels={'geometric_combined': 'combined (geom)'})
+            fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
+            add_iso_lines(fig, geometric_combined, to_lonlat=False)
+        fig.write_html(os.path.join(output_dir, f'combined_confidence_{surface_name}.html'),
+                       config={"scrollZoom": True})
+    except Exception as e:
+        warnings.warn(f"Could not save combined interactive map: {e}")
+
+    return {
+        'arithmetic_combined': arithmetic_combined,
+        'geometric_combined': geometric_combined
     }
