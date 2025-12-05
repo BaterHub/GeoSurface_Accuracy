@@ -497,7 +497,23 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
         grid_points_use, wells_points, sections_points
     )
 
-    df = pd.DataFrame({'x': grid_points_use[:, 0], 'y': grid_points_use[:, 1]})
+    # initialize coordinates (lon/lat prefilled with NaN to always keep the columns)
+    lon_vals = np.full(len(grid_points_use), np.nan)
+    lat_vals = np.full(len(grid_points_use), np.nan)
+    if crs_proj:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+            lon_vals, lat_vals = transformer.transform(grid_points_use[:, 0], grid_points_use[:, 1])
+        except Exception as e:
+            warnings.warn(f"Could not compute lon/lat: {e}")
+
+    df = pd.DataFrame({
+        'lon': lon_vals,
+        'lat': lat_vals,
+        'x': grid_points_use[:, 0],
+        'y': grid_points_use[:, 1]
+    })
     # initialize columns with NaN to keep structure even if empty
     df['dist_wells'] = np.nan
     df['dist_wells_km'] = np.nan
@@ -523,17 +539,6 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             df['weight_sections'] = sections_w
     if combined is not None:
         df['weight_combined'] = combined
-    # lon/lat if CRS provided
-    if crs_proj:
-        try:
-            from pyproj import Transformer
-            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
-            lon, lat = transformer.transform(df['x'].values, df['y'].values)
-            df['lon'] = lon
-            df['lat'] = lat
-        except Exception as e:
-            warnings.warn(f"Could not compute lon/lat: {e}")
-
     df.to_csv(os.path.join(output_dir, f'horizontal_confidence_grid_{surface_name}.csv'), index=False)
 
     # Heatmap
@@ -1046,7 +1051,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
                               GX, GY, mask, output_dir, surface_name, idw_power=2,
                               well_depths_df=None, section_depths_df=None,
                               well_id_field='NOME_POZZO', section_id_field='NOME',
-                              xlim=None, ylim=None):
+                              xlim=None, ylim=None, crs_proj=None):
     """
     Compute vertical confidence from checkpoints with Z (primarily wells).
     Produces CSV, heatmaps (|dZ| and normalized |dZ|), and HTML scatter.
@@ -1137,7 +1142,19 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
     else:
         abs_delta_norm = np.ones_like(abs_delta_grid)
 
+    lon_vals = np.full(len(grid_points_use), np.nan)
+    lat_vals = np.full(len(grid_points_use), np.nan)
+    if crs_proj:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(crs_proj, "EPSG:4326", always_xy=True)
+            lon_vals, lat_vals = transformer.transform(grid_points_use[:, 0], grid_points_use[:, 1])
+        except Exception as e:
+            warnings.warn(f"Could not compute lon/lat for vertical grid: {e}")
+
     df = pd.DataFrame({
+        'lon': lon_vals,
+        'lat': lat_vals,
         'x': grid_points_use[:, 0],
         'y': grid_points_use[:, 1],
         'abs_delta_z': abs_delta_grid,
