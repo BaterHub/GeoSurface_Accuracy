@@ -548,7 +548,7 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             mask2d = mask.reshape(GX.shape)
             grid_weights[mask2d] = combined
             fig_w = plt.figure(figsize=(10, 8))
-            plt.pcolormesh(GX, GY, grid_weights, cmap='viridis', shading='auto', vmin=0, vmax=1)
+            plt.pcolormesh(GX, GY, grid_weights, cmap='viridis_r', shading='auto', vmin=0, vmax=1)
             plt.colorbar(label='Confidence weight (0-1)')
             plt.title(f'Horizontal confidence (IDW) - {surface_name}')
             if xlim:
@@ -612,14 +612,14 @@ def generate_accuracy_outputs(vertices, wells_shp, sections_shp, output_dir,
             if use_geo:
                 fig = px.scatter_mapbox(
                     df_plot, lat='lat', lon='lon', color='weight_plot',
-                    color_continuous_scale='viridis', range_color=[0, 1],
+                    color_continuous_scale='viridis_r', range_color=[0, 1],
                     title=f'Horizontal confidence IDW {surface_name}',
                     zoom=6, height=750
                 )
                 fig.update_layout(mapbox_style="open-street-map")
             else:
                 fig = px.scatter(df_plot, x='x', y='y', color='weight_plot',
-                                 color_continuous_scale='viridis', range_color=[0, 1],
+                                 color_continuous_scale='viridis_r', range_color=[0, 1],
                                  title=f'Horizontal confidence IDW {surface_name}', width=900, height=750)
                 fig.update_layout(xaxis_title='X', yaxis_title='Y')
             fig.write_html(os.path.join(output_dir, f'interactive_confidence_{surface_name}.html'))
@@ -1193,7 +1193,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             warnings.warn(f"Could not save vertical heatmap {fname}: {e}")
 
     _plot_heat(abs_delta_norm, f'Vertical confidence normalized |dZ| - {surface_name}',
-               f'vertical_deltaZ_norm_{surface_name}.png', cmap='viridis',
+               f'vertical_deltaZ_norm_{surface_name}.png', cmap='plasma_r',
                vmin=0, vmax=1, cbar_label='normalized |dZ| (1=best)')
 
     # Interactive scatter
@@ -1205,7 +1205,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
         if use_geo:
             fig = px.scatter_mapbox(
                 df_plot, lat='lat', lon='lon', color='abs_delta_norm',
-                color_continuous_scale='viridis', range_color=[0, 1],
+                color_continuous_scale='plasma_r', range_color=[0, 1],
                 title=f'Vertical confidence normalized |dZ| - {surface_name}',
                 labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'},
                 zoom=6, height=750
@@ -1213,7 +1213,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             fig.update_layout(mapbox_style="open-street-map")
         else:
             fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
-                             color_continuous_scale='viridis', range_color=[0, 1],
+                             color_continuous_scale='plasma_r', range_color=[0, 1],
                              title=f'Vertical confidence normalized |dZ| - {surface_name}',
                              labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
             fig.update_layout(xaxis_title='X', yaxis_title='Y')
