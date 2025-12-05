@@ -1236,7 +1236,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             warnings.warn(f"Could not save vertical heatmap {fname}: {e}")
 
     _plot_heat(abs_delta_norm, f'Vertical confidence normalized |dZ| - {surface_name}',
-               f'vertical_deltaZ_norm_{surface_name}.png', cmap='plasma_r',
+               f'vertical_deltaZ_norm_{surface_name}.png', cmap='plasma',
                vmin=0, vmax=1, cbar_label='normalized |dZ| (1=best)')
 
     # Interactive scatter
@@ -1285,7 +1285,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             mapbox_token = os.getenv("MAPBOX_TOKEN", None)
             fig = px.scatter_mapbox(
                 df_plot, lat='lat', lon='lon', color='abs_delta_norm',
-                color_continuous_scale='plasma_r', range_color=[0, 1],
+                color_continuous_scale='plasma', range_color=[0, 1],
                 title=f'Vertical confidence normalized |dZ| - {surface_name}',
                 labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'},
                 zoom=6, height=750
@@ -1297,7 +1297,7 @@ def generate_vertical_outputs(vertices, triangles, wells_shp, sections_shp, grid
             )
         else:
             fig = px.scatter(df_plot, x='x', y='y', color='abs_delta_norm',
-                             color_continuous_scale='plasma_r', range_color=[0, 1],
+                             color_continuous_scale='plasma', range_color=[0, 1],
                              title=f'Vertical confidence normalized |dZ| - {surface_name}',
                              labels={'abs_delta_norm': 'normalized |dZ| (1 = best)'})
             fig.update_layout(xaxis_title='X', yaxis_title='Y', dragmode='zoom')
